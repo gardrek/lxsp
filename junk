@@ -1,0 +1,228 @@
+
+
+(mul (let 
+    '((mulRecurse (fn (x y) (if (lt x 1) 0 (add y (mulRecurse (sub x 1) y))))))
+    (fn (x y) (if (lt x y) (mulRecurse x y) (mulRecurse y x)))))
+
+
+(mul (let '((mulRecurse (fn (x y) (if (lt x 1) 0 (add y (mulRecurse (sub x 1) y)))))) (fn (x y) (if (lt x y) (mulRecurse x y) (mulRecurse y x)))))
+
+
+mul
+    let
+        [(mulRecurse (fn (x y) (if (lt x 1) 0 (add y (mulRecurse (sub x 1) y)))))]
+        (fn (x y) (if (lt x y) (mulRecurse x y) (mulRecurse y x)))
+
+
+
+
+
+Binary(Call(HirFunction("sum", [Binary(Var("n", Primitive(Int)), Sub, Literal(Int(1), Primitive(Int)), Primitive(Int))])), Add, Call(HirFunction("sum", [Binary(Var("n", Primitive(Int)), Sub, Literal(Int(2), Primitive(Int)), Primitive(Int))])), Primitive(Unit))'
+
+
+
+
+
+
+/*
+use clap::Parser;
+
+#[derive(Parser)]
+#[command(name = "lxsp")]
+#[command(author = "Kevin K. <kbknapp@gmail.com>")]
+#[command(version = "1.0")]
+#[command(about = "Does awesome things", long_about = None)]
+struct Cli {
+    #[arg(long)]
+    two: String,
+    #[arg(long)]
+    one: String,
+}
+
+#[derive(Parser)]
+#[command(name = "lxsp")]
+#[command(author = "ZLM <@gmail.com>")]
+#[command(version = "1.0")]
+#[command(about = "Does awesome things", long_about = None)]
+struct Cli1 {
+    /// Optional name to operate on
+    name: Option<String>,
+
+    /// Sets a custom config file
+    #[arg(short, long, value_name = "FILE")]
+    config: Option<PathBuf>,
+
+    /// Turn debugging information on
+    #[arg(short, long, action = clap::ArgAction::Count)]
+    debug: u8,
+}
+/* */
+
+
+
+
+ABCDEFGHIJKLMNOPQRSTUVWXYZ
+
+BCDEGPTV(Z*)
+AHJK
+FLMNSX
+IY
+O
+QU
+R
+W
+(Z*)
+
+
+AHJK
+BCDEGPTV
+FMNSX
+QU
+R
+Y
+
+
+
+0123456789
+
+
+
+R
+Y
+AHJK
+FMNSX
+BCDEGPTV
+QU
+
+
+012345678
+
+
+fn gardrek<'t>() -> Leslie<'t>;
+
+1000DEC == 1331NON == 1750OCT
+
+R
+Y
+AHJK
+FMNSX
+BCDEGPTV
+QU
+
+
+01234567
+
+a*a*a + a*A
+
+
+
+BCDEGPTV(Z*)3
+AHJK8
+FLMNSX
+IY59
+O4
+QU2
+R
+W
+(Z*)
+0
+1
+6
+7
+
+01234567
+
+
+AHJK8
+FLMNSX
+R
+W
+
+7623fary
+-  7 6 2 3
+f  F E D C
+a  8 9 A B
+r  7 6 5 4
+y  0 1 2 3
+
+-  f a r y
+7  F 8 7 0
+6  E 9 6 1
+2  D A 5 2
+3  C B 4 3
+
+ 1 a 8 2 3 2 c 6
+y6a2a7y2y3y2f3r6
+
+ a 2 f 3 b d f 1
+a2y2f7y3a3f2f7y6
+
+ 6 4 1 3 3 3 7 7
+r6r3y6y3y3y3r7r7
+
+ c 4 5 b 6 0 9 9
+f3r3r2a3r6y7a6a6
+
+0x1a8232c6_a2f3bdf1_64133377_c45b6099
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+not exactly a language per say but the other day i was in a government office, waiting for my number to be called, and I came up with an alphanumeric code designed to be highly unambiguous when spoken in English. the numbers were of a form like A51 or P284, and i misheard one as 8-something instead of A-something and became inspired to come up with an "alphabet" for the purpose of being unambiguous even when spoken. so i came up with an alphabet of 12 characters: 8 numerals and 4 letters.
+01234567AFRY
+so, in my accent, and i think many others, none of these letters share exactly the same vowel sounds, except 5 and Y. if you say 0 as "oh" then you introduce more ambiguity with 4, though not too much I think. probably depends on the accent. regardless, it is recommended to always say "zero"
+this is not meant to require that the person reading it out say the numbers or letters in a different way than they already would. for that, something like the militaries use is fine. an agreed-upon word for each letter and then they use "niner" to avoid 9-5 ambiguity
+
+this specification does not suggest any particular encoding but there is one particular encoding that i was quite pleased to see fall out of the math. a unit of one letter-numeral pair has 32 possibilities, and it just so happens that i do enjoy a nice base-32 encoding now and then. by alternating letters and numbers, one could make something essentially encoded in base-32, or more precisely, base (4, 8) (this specification does recommend letters be used first in codes such as this)
+i'm alternating writing my messages like a message and like a specification haha
+anyway i think it's pretty neat. and you could even go further and drop more from the alphabet. dropping 4 and 5 gives you a decimal code (plus you could swap out 3 for C if you wanted 5 numbers and 5 letters for some reason)
+but actually the decimal code 012367AFRY (possibly arranged as 0123RF67AY to let numerals retain their numerical value) actually has the same property with alternating letters and numbers giving you base-24. not sure that's super useful
+more useful is 01234567AF, which of course gives base-16 (using only letters that also appear in base-16 - this could be a feature or an antifeature haha) 
+for base-16 though you'd surely use 4 numbers and 4 letters instead, that would make sense, so maybe 2367AFRY for maximum clarity in both reading and writing
+anyway how about them actual languages haha
+actually maybe the cryptography channel would have liked that better.
+
+
+
+> i came up with a way to encode hexadecimal digits in a letter-numeral pair of the set `2367afry`
+i think it's kind of clever, the way i tried to make it easy to remember
+```
+-  f a r y
+7  F 8 7 0
+6  E 9 6 1
+2  D A 5 2
+3  C B 4 3
+```
+>>> a lot of the table can be inferred from how you write the hex digits. the hex digits are written starting at the top-right and going down (Japanese style, if you're a big nerd and/or actually Japanese) but then columns alternate going up and down 
+in this way, it makes it so that each hexidecimal digit is mapped to a letter-number which contains it. in other words, each row and column except for r and y contains itself. 
+so as long as you remember the numerals and letters in the set (or you're working from encoded data with low noise transmission) it's not too hard to remember the key. 
+"fary" being pronounceable helps with memorization of the row order.
+this way you also don't need to remember the order of the numbers, or of f and a. you only have to know where either r or y goes (probably by remembering "fary") and the way the hex numbers snake around and you're good to go. but the fary mnemonic will also help orient you about which way the snaking went
+the Snake Way, one might say
+big nerds will get the reference, possibly
+actually that's a decent name for this
+idk what the use case is for this. i guess whenever you need to shout a bunch of data in a format sort of related to hexadecimal digits across a noisy room? or over the phone. that's definitely going to be the bottleneck of your TCP-over-human-voice network hehe
+
+
+
+alt encodings
+```
+-    0 8 4 9
+-    f a r y
+n 7  F 8 7 0
+x 6  E 9 6 1
+u 2  D A 5 2
+c 3  C B 4 3
+```

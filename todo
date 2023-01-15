@@ -1,0 +1,51 @@
+Lisp todo (in order of precedence):
+[done] change Box<Vec<T>> to Rc<[T]> so cloning is cheaper and probably enjoy a huge speed-up
+- implement macros into the lisp
+    read mary's source and see if that helps
+        if that doesn't work well google i guess
+- use the lisp to implement brainfuck
+    - doesn't necessarily need IO but needs macros i'm sure?
+- basic compiler?
+- attempt to implement tail call optimization
+    don't worry if it doesn't seem to work, we can come back later when we do more compiling stuff
+- possibly implement IO?
+    - do i want to try to wrap my head around monads or something like that?
+    - or do i break my functional purity
+- implement UnsafeFunc?
+    - idk if this is necessary or why
+- implement "firsts" and "seconds" in lisp instead of the messy rust version
+
+nicer repl
+need editing, history, maybe more
+
+brace completion/hinting?
+    imagine this is what you've typed (underscore is cursor):
+    > (add (mul 10 20) (fib 10_
+    have it actually look something like this
+    > (add (mul 10 20) (fib 10_))
+    the braces after the end are grey or some other color
+        they're there to help you finish braces
+        maybe the unmatched braces are also that color, or some other color
+        this would probably be easier to implement than letting you spread things across multiple lines
+            (at least once we have a nicer terminal wrapper)
+    also brace pair highlighting for the already typed ones
+
+MATCH
+
+// we might have to specify type because things can be multiple types
+// okay instead of things being multiple types we should lean into traitss/interfaces
+match v /* of type Value */ {
+    Atom(a) => print!("atom {}", a);
+    List(l) => print!("list of length {}", l.len());
+}
+
+(match (Value v) (
+    ((Atom a) (print! "atom {}" a))
+    ((List l) (print! "list of length {}" (len l)))
+))
+
+----=-=-==== IO ====-=-=----
+
+Monads? Monoids?? Endofunctors???
+
+--==-- /IO

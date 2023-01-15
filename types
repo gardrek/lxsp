@@ -1,0 +1,108 @@
+sort of like gradual typing, everything is the same all-encompassing type by default. call it "lisp value" for now
+rather than have e.g. two types, list and atom (which `nil/()` already complicates anyway) we'll have something similar to traits/interfaces. and so a "type" that implements a "trait" is actually like a subset of lisp values
+so rather than saying, here's a type like a struct or an enum, and it implements X trait, you say this type is the subset of lisp values which are e.g. an atom beginning with a numeral
+this allows you to create "anonymous" structs by saying e.g. "type Map is a list of any size, with each element being a list of size two, with the first element being an atom, specifically a symbol"
+perhaps the syntax for such a delcaration could look like this:
+    (type 'Map ('List ('List ('Symbol 'Value)) *))
+
+currently i don't have any ideas for a canonical implementation of named structs (e.g. in Rust a Foo(u8) is not a Bar(u8) even though they have the same structure)
+but one can specify that the type/trait contains some fixed value, essentially a name
+this would look a lot like a constructor function with the name of the struct, and indeed you could define such a constructor automatically
+
+okay let's build this up from basic principles
+first we have an "enum" style type; simply enumerate all possible values
+e.g. all lisp values are of the form
+```rust
+enum Value {
+    Atom(AtomPayload);
+    Cons(Pointer<Value>, Pointer<Value>);
+}
+```
+so we need a syntax to represent similar ideas
+
+in Rust, each of the elements included is either a type or a simple identifier
+in lisp, identifiers (symbols) are a type of value, and we likely want all other values to be allowed as well
+so essentially, a basic "enum" is a list of possible allowed values, and an enum of one element is a constant
+so named structs can be implemented by simply prepending such an enum
+
++   one or more instances repeating
+*   zero or more instances repeating
+|   logical OR  /  enum-style optionals
+&   logical AND
+
+```
+struct Map {
+    Vec<(Symbol, Value)>
+}
+
+; here's a map from any key to any value
+(type '(list (enum 'Map) (list (list (any Symbol) (any Value)) *)))
+
+; lisp example
+('Map (('x 11) ('y 23) ('z 19)))
+
+; here's a map from any key to values of a given type
+(type (list (enum 'Map) (capture (v 'type)) (list (list (any Symbol) (any v)) *)))
+
+; it might not be possible to create a typed version that infers type by e.g. checking the first item's type
+; because values don't have an inherent type, but rather essentially "match" multiple "types"
+; plus all empty lists of such a type would be the same type
+```
+
+MATCH
+rust
+
+match v /* of type Value */ {
+    Atom(a) => print!("atom {}", a);
+    List(l) => print!("list of length {}", l.len());
+}
+
+(match (Value v) (
+    ((Atom a) (print! "atom {}" a))
+    ((List l) (print! "list of length {}" (len l)))
+))
+
+
+
+sum types, aka rust-style enums, should use + and product types, aka structs, should use *
+or just sum and product
+
+(type 'Boolean (sum 'True 'False))
+=:=
+enum Boolean {
+    True,
+    False,
+}
+
+'x.Int =:= (pair 'x 'Int) =:= (cons 'x 'Int) =:= '(x . Int)
+
+what if instead, the type was eval'd?
+'x:Int =:= (pair 'x Int) =:= (cons 'x Int) =:= `(x . ,Int)
+
+(type 'Point (product (cons 'x 'Int) (cons 'y 'Int)))
+=:=
+(type 'Point (product 'x:Int 'y:Int))
+=:=
+struct Point {
+    x: Int,
+    y: Int,
+}
+
+method syntax!
+the most obvious choice?
+(someObject.someMethod arg1 arg2 ...)
+
+
+
+
+
+actually each thing should probably have exactly one type or it's confusing
+current types:
+    Nil:     Value, Atom, List
+    Cons:    Value
+        Cons<*Value, *Cons>
+    Symbol:  Value, Atom
+    Number:  Value, Atom
+
+
+
