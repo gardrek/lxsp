@@ -5,6 +5,10 @@ mod parse;
 mod scan;
 mod tests;
 
+//~ use std::io::Read;
+//~ use std::io::Write;
+use terminal::{Action, Color};
+
 use clap::Parser;
 use once_cell::sync::OnceCell;
 
@@ -48,11 +52,35 @@ fn add_lib<'e, 's>(
     Ok(base_env.new_inner_from_pairs(&pairs)?)
 }
 
-fn main() -> Result<(), Box<dyn std::error::Error>> {
-    //~ use std::io::Read;
-    //~ use std::io::Write;
-    use terminal::{Action, Color};
+fn print_prompt(session: &cli::Session) -> Result<(), Box<dyn std::error::Error>> {
+    session
+        .terminal
+        .act(Action::SetForegroundColor(Color::Blue))?;
 
+    print!("λ ");
+
+    session
+        .terminal
+        .act(Action::SetForegroundColor(Color::Reset))?;
+
+    Ok(())
+}
+
+fn print_error(session: &cli::Session, error: &str) -> Result<(), Box<dyn std::error::Error>> {
+    session
+        .terminal
+        .act(Action::SetForegroundColor(Color::Red))?;
+
+    print!("{}", error);
+
+    session
+        .terminal
+        .act(Action::SetForegroundColor(Color::Reset))?;
+
+    Ok(())
+}
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args = cli::ArgStruct::parse();
 
     BASE_ENV.set(LispEnv::default()).unwrap();
@@ -116,6 +144,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut command_buffer = String::new();
     let mut cursor_position = (0u16, 0u16);
 
+    print_prompt(&session)?;
+
     'main: loop {
         match session.wait_for_event()? {
             Retrieved::Event(Some(event)) => {
@@ -125,17 +155,33 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                         let _modifiers = modifiers;
                         match code {
                             Esc => break 'main Ok(()),
+                            Backspace => {
+                                if let Some(_ch) = command_buffer.pop() {
+                                    session.terminal.act(Action::MoveCursorTo(
+                                        cursor_position.0 - 1,
+                                        cursor_position.1,
+                                    ))?;
+                                    print!(" ");
+                                    session.terminal.act(Action::MoveCursorTo(
+                                        cursor_position.0 - 1,
+                                        cursor_position.1,
+                                    ))?;
+                                };
+                            }
                             Enter => {
-                                print!("{}\r\n", command_buffer);
-                                
+                                //print!("{}\r\n", command_buffer);
+                                print!("\r\n");
+
                                 let line = command_buffer.clone();
-                        
+
                                 if line.trim().is_empty() {
+                                    command_buffer.clear();
+                                    print_prompt(&session)?;
                                     continue;
                                 } else if line.trim() == "exit" {
                                     break 'main Ok(());
                                 }
-                        
+
                                 let result = parse_eval(&line, env);
                                 match result {
                                     Ok(res) => {
@@ -144,19 +190,22 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                                             break 'main Ok(());
                                         }
                                     }
-                                    Err(e) => print!("[ERROR] {}\r\n", e),
+                                    Err(e) => {print_error(&session, &format!("[ERROR] {}\r\n", e))?},
                                 }
-                                command_buffer.clear()
-                            },
-                            Char(c) => command_buffer.push(c),
-                            _ => (),
+                                command_buffer.clear();
+                                print_prompt(&session)?;
+                            }
+                            Char(ch) => {
+                                command_buffer.push(ch);
+                                print!("{}", ch);
+                            }
+                            _ => print!("{:?}\r\n", event),
                         }
                     }
                     _ => {
                         //todo!()
                     }
                 }
-                //print!("{:?}\r\n", event);
             }
             Retrieved::Event(None) => todo!(),
             _ => (),
@@ -165,10 +214,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         if let Retrieved::CursorPosition(x, y) = session.get_cursor_position()? {
             cursor_position = (x, y)
         };
-        session.terminal.act(terminal::Action::MoveCursorTo(0, 0))?;
-        session.terminal.act(terminal::Action::ClearTerminal(terminal::Clear::CurrentLine))?;
-        print!("{}", command_buffer);
-        session.terminal.act(terminal::Action::MoveCursorTo(0, cursor_position.1))?;
+        //~ session.terminal.act(Action::MoveCursorTo(0, 0))?;
+        //~ session.terminal.act(Action::ClearTerminal(terminal::Clear::CurrentLine))?;
+        //~ session.terminal.act(Action::MoveCursorTo(0, cursor_position.1))?;
+        //print!("{}", command_buffer);
     }
 
     /*
