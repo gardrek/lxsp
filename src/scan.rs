@@ -132,26 +132,3 @@ impl Iterator for Scanner<'_> {
         self.scan_token()
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn scan_math_test() {
-        let src = "(add
-(add 10 5 2)
-(sub 10 7)
-(sub 10 (add 5 2))
-(sub(add 1 1)1)
-(    add    5       6       )
-
-)";
-
-        let scanner = Scanner::new(src);
-
-        let tokens = scanner.collect::<Vec<_>>();
-
-        assert_eq!(tokens.len(), 37);
-    }
-}

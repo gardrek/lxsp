@@ -1,4 +1,9 @@
-_Core = nil
+
+local global = dofile"src/gmt.lua"
+
+print("core", global)
+
+local _Core = nil
 do
     local core = {
         std = {},
@@ -92,7 +97,7 @@ do
         indent_helper(tag(val), f, indent)
     end
 
-    inspect = function(t, depth)
+    local function inspect(t, depth)
         local f = inspect
         depth = depth or 0
 
@@ -130,6 +135,8 @@ do
             return tostring(t)
         end
     end
+    
+    print_recursively = inspect
 end
 
 -- inspect(_Core)
@@ -155,5 +162,31 @@ print(test_mut)
 ]]--
 
 local dbg = require("src.dbg")
-print(dbg.to_debug_string("face"))
 
+print(dbg.to_debug_string('say it to my "face"'))
+print(dbg.to_debug_string('say it to my \"face\"'))
+print(dbg.to_debug_string("say it to my \"face\""))
+
+print(dbg.to_debug_string("say it to my 'face'"))
+print(dbg.to_debug_string("say it to my \'face\'"))
+print(dbg.to_debug_string('say it to my \'face\''))
+
+print(dbg.to_debug_string(function (x) return x end))
+
+print(dbg.to_debug_string({}))
+
+local f = function(...)
+    local args = table.pack(...)
+    local printResult = "pr:"
+    for i = 1, args.n do
+        local v = args[i]
+        printResult = printResult .. dbg.to_debug_string(v) .. ", "
+    end
+    return printResult
+end
+
+print(f(1, "shello", false, nil, function(x) return x end))
+
+print(f(nil, nil, 1, "shello", false, nil, function(x) return x end))
+
+print(f(1, "shello", false, nil, function(x) return x end, nil, nil))

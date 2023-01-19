@@ -1,11 +1,11 @@
-use super::lisp::LispValue;
+use super::lisp::Value;
 use super::scan;
 use scan::{Token, TokenPayload};
 /*
 pub struct Parser {
-    list_stack: Vec<Vec<LispValue>>,
-    current_list: Optin<Vec<LispValue>>,
-    list: Vec<LispValue>,
+    list_stack: Vec<Vec<Value>>,
+    current_list: Optin<Vec<Value>>,
+    list: Vec<Value>,
 }
 
 impl Parser {
@@ -14,7 +14,7 @@ impl Parser {
             LeftParen => {
                 let list = vec![];
                 self.current_value = Some(list);
-                // self.list_stack.push(LispValue::List(list));
+                // self.list_stack.push(Value::List(list));
             }
             RightParen => {
                 let list = self.current_list.take();
@@ -41,7 +41,7 @@ impl core::fmt::Display for ParseError {
     }
 }
 
-pub fn parse<'a>(tokens: &'a [Token]) -> Result<(LispValue, &'a [Token]), ParseError> {
+pub fn parse<'a>(tokens: &'a [Token]) -> Result<(Value, &'a [Token]), ParseError> {
     use TokenPayload::*;
     let (token, rest) = tokens
         .split_first()
@@ -53,13 +53,13 @@ pub fn parse<'a>(tokens: &'a [Token]) -> Result<(LispValue, &'a [Token]), ParseE
         Quote(inner) => match &**inner {
             LeftParen => {
                 let (val, rest) = read_seq(rest)?;
-                Ok((LispValue::quoted(val), rest))
+                Ok((Value::quoted(val), rest))
             }
-            Atom(s) => Ok((LispValue::quoted(parse_atom(&s)), rest)),
+            Atom(s) => Ok((Value::quoted(parse_atom(&s)), rest)),
             /*
             Quote(q) => {
                 let (token, _) = parse(&[q])?;
-                Ok((LispValue::quoted(), rest))
+                Ok((Value::quoted(), rest))
             }
             */
             _ => return Err(ParseError::Reason("invalid quote syntax".to_string())),
@@ -67,15 +67,15 @@ pub fn parse<'a>(tokens: &'a [Token]) -> Result<(LispValue, &'a [Token]), ParseE
     }
 }
 
-fn read_seq<'a>(tokens: &'a [Token]) -> Result<(LispValue, &'a [Token]), ParseError> {
-    let mut res: Vec<LispValue> = vec![];
+fn read_seq<'a>(tokens: &'a [Token]) -> Result<(Value, &'a [Token]), ParseError> {
+    let mut res: Vec<Value> = vec![];
     let mut xs = tokens;
     loop {
         let (next_token, rest) = xs
             .split_first()
             .ok_or(ParseError::Reason("could not find closing `)`".to_string()))?;
         if let TokenPayload::RightParen = &next_token.payload {
-            return Ok((LispValue::List(res.into()), rest)); // skip `)`, head to the token after
+            return Ok((Value::List(res.into()), rest)); // skip `)`, head to the token after
         }
         let (exp, new_xs) = parse(&xs)?;
         res.push(exp);
@@ -83,9 +83,9 @@ fn read_seq<'a>(tokens: &'a [Token]) -> Result<(LispValue, &'a [Token]), ParseEr
     }
 }
 
-fn parse_atom(token: &str) -> LispValue {
+fn parse_atom(token: &str) -> Value {
     match token.parse::<i64>() {
-        Ok(v) => LispValue::Integer(v),
-        Err(_) => LispValue::Symbol(token.to_string().clone()),
+        Ok(v) => Value::Integer(v),
+        Err(_) => Value::Symbol(token.to_string().clone()),
     }
 }

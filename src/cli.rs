@@ -13,12 +13,22 @@ impl Session {
         s.init()
     }
 
+    pub fn wait_for_event(&self) -> Result<terminal::Retrieved, Box<dyn std::error::Error>> {
+        Ok(self.terminal.get(terminal::Value::Event(None))?)
+    }
+
+    pub fn get_cursor_position(&self) -> Result<terminal::Retrieved, Box<dyn std::error::Error>> {
+        Ok(self.terminal.get(terminal::Value::CursorPosition)?)
+    }
+
     fn init(mut self) -> Session {
         self.reset_style().unwrap();
 
         self.terminal
             .act(Action::ClearTerminal(Clear::CurrentLine))
             .unwrap();
+
+        self.terminal.act(Action::EnableRawMode).unwrap();
 
         self
     }
@@ -38,14 +48,18 @@ impl Session {
 
 impl Drop for Session {
     fn drop(&mut self) {
-        self.terminal
-            .act(Action::ClearTerminal(Clear::CurrentLine))
-            .unwrap();
-
         self.reset_style().unwrap();
 
-        // other actions that reset stuff
+        self.terminal.act(Action::DisableRawMode).unwrap();
+
+        self.terminal
+            .act(Action::ClearTerminal(Clear::All))
+            .unwrap();
+
+        // actions that reset stuff
         /*
+            self.reset_style()
+            ClearTerminal(Clear::All)
             ShowCursor,
             DisableRawMode,
             LeaveAlternateScreen,
@@ -75,7 +89,6 @@ pub fn _main() -> error::Result<()> {
 
     Ok(())
 }
-
 
 use clap::Parser;
 
@@ -108,4 +121,37 @@ struct Cli1 {
     #[arg(short, long, action = clap::ArgAction::Count)]
     debug: u8,
 }
+
+
+use crossterm::terminal;
+use std::io;
+use std::io::Read;
+
+struct CleanUp;
+
+impl Drop for CleanUp {
+    fn drop(&mut self) {
+        terminal::disable_raw_mode().expect("Could not disable raw mode")
+    }
+}
+/* */
+
+
+fn main() {
+    let _clean_up = CleanUp;
+    terminal::enable_raw_mode().expect("Could not turn on Raw mode");
+    let mut buf = [0; 1];
+    while io::stdin().read(&mut buf).expect("Failed to read line") == 1 && buf != [b'q'] {
+        /* add the following */
+        let character = buf[0] as char;
+        if character.is_control() {
+            println!("{}\r", character as u8)
+        } else {
+            println!("{}\r", character)
+        }
+        /* end */
+    }
+}
+
+
 */

@@ -3,22 +3,23 @@ mod eval;
 mod lisp;
 mod parse;
 mod scan;
+mod tests;
 
-use once_cell::sync::OnceCell;
 use clap::Parser;
+use once_cell::sync::OnceCell;
 
-pub static BASE_ENV: OnceCell<eval::LispEnv<'_>> = OnceCell::new();
+use eval::LispEnv;
+use lisp::Value as LispValue;
 
-pub static STD_ENV: OnceCell<eval::LispEnv<'_>> = OnceCell::new();
+pub static BASE_ENV: OnceCell<LispEnv<'_>> = OnceCell::new();
 
-pub fn parse_eval(
-    source: &str,
-    env: &eval::LispEnv,
-) -> Result<lisp::LispValue, Box<dyn std::error::Error>> {
-    Ok(env.eval(&parse_file(&source)?)?)
+pub static STD_ENV: OnceCell<LispEnv<'_>> = OnceCell::new();
+
+pub fn parse_eval(source: &str, env: &LispEnv) -> Result<LispValue, Box<dyn std::error::Error>> {
+    Ok(env.eval(&parse_string(&source)?)?)
 }
 
-pub fn parse_file(source: &str) -> Result<lisp::LispValue, Box<dyn std::error::Error>> {
+pub fn parse_string(source: &str) -> Result<LispValue, Box<dyn std::error::Error>> {
     let scanner = scan::Scanner::new(source);
 
     let tokens = scanner.collect::<Vec<_>>();
@@ -39,20 +40,22 @@ fn input_line() -> String {
 }
 
 fn add_lib<'e, 's>(
-    base_env: &'e eval::LispEnv,
+    base_env: &'e LispEnv,
     src: &'s str,
-) -> Result<eval::LispEnv<'e>, Box<dyn std::error::Error>> {
-    let pairs = parse_file(&src)?;
+) -> Result<LispEnv<'e>, Box<dyn std::error::Error>> {
+    let pairs = parse_string(&src)?;
 
     Ok(base_env.new_inner_from_pairs(&pairs)?)
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    use std::io::Write;
+    //~ use std::io::Read;
+    //~ use std::io::Write;
+    use terminal::{Action, Color};
 
     let args = cli::ArgStruct::parse();
-    
-    BASE_ENV.set(eval::LispEnv::default()).unwrap();
+
+    BASE_ENV.set(LispEnv::default()).unwrap();
 
     let base_env = BASE_ENV.get().unwrap();
 
@@ -61,11 +64,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     } else {
         let src = std::fs::read_to_string("lisb/std.l")?;
         //~ let src = std::fs::read_to_string("lisb/lam.l")?;
-    
+
         let std_inner = add_lib(&base_env, &src)?;
-    
+
         STD_ENV.set(std_inner).unwrap();
-    
+
         STD_ENV.get().unwrap()
     };
 
@@ -90,16 +93,86 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!();
 
     use cli::Session;
+    use terminal::Retrieved;
 
     let session = Session::new();
 
-    use terminal::{Action, Color};
+    /*
+    let mut buf = [0; 1];
+    while io::stdin().read(&mut buf).expect("Failed to read line") == 1
+        && buf != [b'q']
+        && buf != [3]
+    {
+        let character = buf[0] as char;
+        print!("len: {}\r\n", buf.len());
+        if character.is_control() {
+            print!("control {}\r\n", character as u8)
+        } else {
+            print!("char {}\r\n", character)
+        }
+    }
+    */
+
+    let mut command_buffer = String::new();
+    let mut cursor_position = (0u16, 0u16);
 
     'main: loop {
-        /*
-        session.terminal
-            .act(Action::SetBackgroundColor(Color::White))?;
-        */
+        match session.wait_for_event()? {
+            Retrieved::Event(Some(event)) => {
+                match event {
+                    terminal::Event::Key(terminal::KeyEvent { code, modifiers }) => {
+                        use terminal::KeyCode::*;
+                        let _modifiers = modifiers;
+                        match code {
+                            Esc => break 'main Ok(()),
+                            Enter => {
+                                print!("{}\r\n", command_buffer);
+                                
+                                let line = command_buffer.clone();
+                        
+                                if line.trim().is_empty() {
+                                    continue;
+                                } else if line.trim() == "exit" {
+                                    break 'main Ok(());
+                                }
+                        
+                                let result = parse_eval(&line, env);
+                                match result {
+                                    Ok(res) => {
+                                        print!(" => {}\r\n", res);
+                                        if res == LispValue::Symbol("exit".to_string()) {
+                                            break 'main Ok(());
+                                        }
+                                    }
+                                    Err(e) => print!("[ERROR] {}\r\n", e),
+                                }
+                                command_buffer.clear()
+                            },
+                            Char(c) => command_buffer.push(c),
+                            _ => (),
+                        }
+                    }
+                    _ => {
+                        //todo!()
+                    }
+                }
+                //print!("{:?}\r\n", event);
+            }
+            Retrieved::Event(None) => todo!(),
+            _ => (),
+        };
+
+        if let Retrieved::CursorPosition(x, y) = session.get_cursor_position()? {
+            cursor_position = (x, y)
+        };
+        session.terminal.act(terminal::Action::MoveCursorTo(0, 0))?;
+        session.terminal.act(terminal::Action::ClearTerminal(terminal::Clear::CurrentLine))?;
+        print!("{}", command_buffer);
+        session.terminal.act(terminal::Action::MoveCursorTo(0, cursor_position.1))?;
+    }
+
+    /*
+    'main: loop {
         session
             .terminal
             .act(Action::SetForegroundColor(Color::Blue))?;
@@ -110,27 +183,25 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         std::io::stdout().flush()?;
         let line = input_line();
-        /*let src = if line.trim().is_empty() {
-            format!("(include 'std ())")
-        } else {
-            format!("(include 'std {})", &line)
-        };*/
+
         if line.trim().is_empty() {
             continue;
         } else if line.trim() == "exit" {
             break Ok(());
         }
+
         let result = parse_eval(&line, env);
         match result {
             Ok(res) => {
                 println!("=> {}", res);
-                if res == lisp::LispValue::Symbol("exit".to_string()) {
+                if res == LispValue::Symbol("exit".to_string()) {
                     break 'main Ok(());
                 }
             }
             Err(e) => println!("[ERR] {}", e),
         }
     }
+    */
 }
 
 /*
@@ -171,79 +242,3 @@ const ALPHABET: [&str; 64] = [
 ];
 */
 //const fn calcuate_reverse_alphabet() -> [&'static str; 64] {}
-
-mod tests; /*{
-               #![cfg(test)]
-
-               use super::*;
-               use lisp::LispValue;
-               use eval::LispEnv;
-               //use eval::{LispEnv, EvalError};
-
-               fn get_std<'a>(base_env: &'a LispEnv) -> Result<LispEnv<'a>, Box<dyn std::error::Error>> {
-                   let src = std::fs::read_to_string("lisb/std.l")?;
-
-                   add_lib(&base_env, &src).into()
-               }
-
-               #[test]
-               fn lua_core() {
-                   let env = eval::LispEnv::default();
-
-                   parse_eval("(lua 'core)", &env).unwrap();
-               }
-
-               #[test]
-               fn std_test() {
-                   let base_env = eval::LispEnv::default();
-
-                   let env = get_std(&base_env).unwrap();
-
-                   use LispValue::*;
-
-                   let tests = &[
-                       ("(id 37)", Integer(37)),
-                       ("(car '(10 20 30))", Integer(10)),
-                       ("(car (cdr '(10 20 30)))", Integer(20)),
-                       ("(car (cdr (cdr '(10 20 30))))", Integer(30)),
-                   ];
-
-                   for (src, result) in tests {
-                       assert_eq!(parse_eval(src, &env).unwrap(), *result);
-                   }
-           /*
-               (div (let '((
-                   divRecurse
-                   (fn
-                       (d v i)
-                       (if
-                           (lt (sub d v) 1)
-                           (if (eq (sub d v) 0) (add i 1) i)
-                           (divRecurse (sub d v) v (add i 1))))))
-                   (fn (d v) (divRecurse d v 0))))
-
-               (fib (fn (n) (if (eq n 0) 0 (if (eq n 1) 1 (add (fib (sub n 1)) (fib (sub n 2)))))))
-
-               (nilP (fn (x) (if (eq x ()) true false)))
-
-               (not (fn (x) (if x false true)))
-
-               (truthyP (fn (x) (if (eq x false) false (not (nilP x)))))
-
-               (longOr (fn (x y) (if (truthyP x) x y)))
-
-               (mul (let
-                   '((mulRecurse (fn (x y) (if (lt x 1) 0 (add y (mulRecurse (sub x 1) y))))))
-                   (fn (x y) (if (lt x y) (mulRecurse x y) (mulRecurse y x)))))
-
-               (pow (let
-                   '((powRecurse (fn (x y) (if (lt x 1) 1 (mul y (powRecurse (sub x 1) y))))))
-                   (fn (x y) (powRecurse x y))))
-
-               (firsts (fn (l) (if (truthy l) (cons (car (car l)) (firsts (cdr l))) ())))
-
-               (seconds (fn (l) (if (truthy l) (cons (car (cdr (car l))) (seconds (cdr l))) ())))
-           */
-               }
-           }
-           // */

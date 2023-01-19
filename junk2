@@ -1,0 +1,31 @@
+    fn reduce(&self, val: &LispValue) -> Result<LispValue, EvalError> {
+        use LispValue::*;
+
+        Ok(match val {
+            Bool(_) | Integer(_) | Func(_) | UnsafeFunc(_) | Lambda(_) => val.fallible_clone()?,
+            Symbol(s) => {
+                let maybe_env_value = self.get(s);
+                match maybe_env_value {
+                    Some(env_value) => env_value.fallible_clone()?,
+                    None => val.fallible_clone()?,
+                }
+            }
+            List(list) => {
+                if val.is_nil() {
+                    val.fallible_clone()?
+                } else {
+                    let f = self.reduce(&list[0])?;
+                    match f {
+                        Func(_) | Lambda(_) => self.apply(&f, &list[1..])?,
+                        UnsafeFunc(_) => val.fallible_clone()?,
+                        Bool(_) | Integer(_) | Symbol(_) | List(_) => {
+                            return Err(EvalError::String(format!(
+                                "[internal fn: reduce] value cannot be called: {}",
+                                &f
+                            )))
+                        }
+                    }
+                }
+            }
+        })
+    }

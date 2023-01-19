@@ -1,5 +1,5 @@
 use super::lisp::LambdaValue;
-use super::lisp::LispValue;
+use super::lisp::Value as LispValue;
 use std::collections::HashMap;
 use std::sync::Arc;
 
@@ -11,6 +11,7 @@ pub type Bindings = HashMap<String, LispValue>;
 pub struct LispEnv<'a> {
     bindings: HashMap<String, LispValue>,
     outer: Option<&'a LispEnv<'a>>,
+    unsafe_level: usize,
 }
 
 #[derive(Debug)]
@@ -34,6 +35,18 @@ impl core::fmt::Display for EvalError {
 }
 
 impl LispEnv<'_> {
+    fn _empty() -> LispEnv<'static> {
+        LispEnv::from_hashmap(HashMap::new())
+    }
+
+    fn from_hashmap(bindings: HashMap<String, LispValue>) -> LispEnv<'static> {
+        LispEnv {
+            bindings,
+            outer: None,
+            unsafe_level: 0,
+        }
+    }
+
     fn get(&self, s: &String) -> Option<&LispValue> {
         match self.bindings.get(s) {
             Some(e) => Some(e),
@@ -58,15 +71,6 @@ impl LispEnv<'_> {
         v
     }
 
-    // TODO: implement recursive version to list thing from parent
-    pub fn _sorted_list_r<'a>(&'a self) -> Vec<&'a String> {
-        let mut v: Vec<_> = self.list().collect();
-
-        v.sort();
-
-        v
-    }
-
     fn flatten(&self) -> Bindings {
         let bindings = HashMap::new();
         self.flatten_recurse(bindings)
@@ -83,8 +87,12 @@ impl LispEnv<'_> {
 
     pub fn eval(&self, val: &LispValue) -> Result<LispValue, EvalError> {
         use LispValue::*;
+
         Ok(match val {
-            Bool(_)        | Integer(_) => val.fallible_clone()?,
+            Bool(_) | Integer(_) | Macro(_) | Func(_) | UnsafeFunc(_) | Lambda(_) => {
+                val.fallible_clone()?
+            }
+            UnsafeCall(_) => todo!(),
             Symbol(s) => self
                 .get(s)
                 .ok_or(EvalError::String(format!(
@@ -97,10 +105,66 @@ impl LispEnv<'_> {
                     val.fallible_clone()?
                 } else {
                     let f = self.eval(&list[0])?;
-                    self.apply(&f, &list[1..])?
+                    //self.apply(&f, &list[1..])?
+                    match f {
+                        Macro(_) | Lambda(_) | Func(_) | UnsafeFunc(_) => {
+                            self.apply(&f, &list[1..])?
+                        }
+                        //~ UnsafeFunc(_) => UnsafeCall(list.clone()),
+                        Bool(_) | Integer(_) | Symbol(_) | List(_) | UnsafeCall(_) => {
+                            return Err(EvalError::String(format!(
+                                "[internal fn: eval] value cannot be called: {}",
+                                &f
+                            )))
+                        }
+                    }
                 }
             }
-            Func(_) | UnsafeFunc(_) | Lambda(_) => val.clone(),
+        })
+    }
+
+    /*
+    fn _reduce1() {
+        let env = LispEnv::empty();
+        let _ = env.reduce(&LispValue::nil());
+        todo!()
+    }
+    */
+
+    // TODO: change the things that can't be reduced to instead return LispValue::Partial
+    pub fn reduce(&self, val: &LispValue) -> Result<LispValue, EvalError> {
+        use LispValue::*;
+
+        Ok(match val {
+            Bool(_) | Integer(_) | Macro(_) | Func(_) | UnsafeFunc(_) | Lambda(_) => {
+                val.fallible_clone()?
+            }
+            UnsafeCall(_) => todo!(),
+            Symbol(s) => {
+                let maybe_env_value = self.get(s);
+                match maybe_env_value {
+                    Some(env_value) => env_value.fallible_clone()?,
+                    None => val.fallible_clone()?,
+                }
+            }
+            List(list) => {
+                if val.is_nil() {
+                    val.fallible_clone()?
+                } else {
+                    let f = self.reduce(&list[0])?;
+                    match f {
+                        Macro(_) | Func(_) | Lambda(_) => self.apply(&f, &list[1..])?,
+                        UnsafeFunc(_) => val.fallible_clone()?,
+                        UnsafeCall(_) => todo!(),
+                        Bool(_) | Integer(_) | Symbol(_) | List(_) => {
+                            return Err(EvalError::String(format!(
+                                "[internal fn: reduce] value cannot be called: {}",
+                                &f
+                            )))
+                        }
+                    }
+                }
+            }
         })
     }
 
@@ -109,19 +173,35 @@ impl LispEnv<'_> {
 
         match val {
             Func(func) => func(args, self),
+            UnsafeFunc(func) => {
+                if self.unsafe_level == 0 {
+                    return Err(eval_err(
+                        "[internal fn: apply] attempt to call unsafe function without `unsafe`",
+                    ));
+                }
+                func(args, self)
+            }
             Lambda(lambda) => {
                 let inner_env = self.new_inner_env(lambda.args.clone(), args)?;
                 let closure_env = LispEnv {
                     bindings: lambda.closure.clone(),
                     outer: Some(&inner_env),
+                    unsafe_level: self.unsafe_level,
                 };
                 closure_env.eval(&lambda.body)
             }
-            UnsafeFunc(_func) => todo!(),
-            Bool(_) | Integer(_) | Symbol(_) | List(_) => Err(EvalError::String(format!(
-                "cannot apply {}; not a function",
-                &val
-            ))),
+            Macro(_) => todo!(),
+            Bool(_) | Integer(_) | Symbol(_) | List(_) | UnsafeCall(_) => Err(EvalError::String(
+                format!("cannot apply {}; not a function", &val),
+            )),
+        }
+    }
+
+    fn new_unsafer_env<'a>(&'a self) -> LispEnv {
+        LispEnv {
+            bindings: Default::default(),
+            outer: Some(self),
+            unsafe_level: self.unsafe_level + 1,
         }
     }
 
@@ -146,6 +226,7 @@ impl LispEnv<'_> {
         Ok(LispEnv {
             bindings: data,
             outer: Some(self),
+            unsafe_level: 0,
         })
     }
 
@@ -242,133 +323,21 @@ pub fn default_env<'a>() -> LispEnv<'a> {
         s: &'static str,
         f: fn(&[LispValue], &LispEnv) -> Result<LispValue, EvalError>,
     ) -> (String, LispValue) {
-        //(s.into(), UnsafeFunc(f))
-        (s.into(), Func(f))
+        (s.into(), UnsafeFunc(f))
     }
 
     let bindings = HashMap::from([
         ("exit".into(), Symbol("exit".to_string())),
-        /*func(
-            "exit",
-            |_args: &[LispValue], _env: &LispEnv| -> Result<LispValue, EvalError> {
-                Ok(Symbol("exit".to_string()))
-            }
-        ),*/
         ("false".into(), Bool(false)),
         ("true".into(), Bool(true)),
         func(
-            "readf",
-            |args: &[LispValue], env: &LispEnv| -> Result<LispValue, EvalError> {
-                let filename = match args.len() {
-                    1 => {
-                        if let LispValue::Symbol(package) = env.eval(&args[0])? {
-                            format!("lisb/{}", format!("{}.lisp", package))
-                        } else {
-                            return Err(eval_err("[readf] Wrong argument type"));
-                        }
-                    }
-                    2 => {
-                        if let LispValue::Symbol(main) = env.eval(&args[0])? {
-                            if let LispValue::Symbol(ext) = env.eval(&args[1])? {
-                                format!("lisb/{}.{}", main, ext)
-                            } else {
-                                return Err(eval_err("[readf] Wrong argument type"));
-                            }
-                        } else {
-                            return Err(eval_err("[readf] Wrong argument type"));
-                        }
-                    }
-                    3 => {
-                        if let LispValue::Symbol(folder) = env.eval(&args[0])? {
-                            if let LispValue::Symbol(main) = env.eval(&args[1])? {
-                                if let LispValue::Symbol(ext) = env.eval(&args[2])? {
-                                    format!("{}/{}.{}", folder, main, ext)
-                                } else {
-                                    return Err(eval_err("[readf] Wrong argument type"));
-                                }
-                            } else {
-                                return Err(eval_err("[readf] Wrong argument type"));
-                            }
-                        } else {
-                            return Err(eval_err("[readf] Wrong argument type"));
-                        }
-                    }
-                    _ => return Err(eval_err("[readf] Wrong number of arguments")),
-                };
-                let source = std::fs::read_to_string(&filename).expect("[readf] IO error");
-                let data = crate::parse_file(&source).expect("[readf] Parse error");
-                Ok(env.eval(&data)?)
-            },
-        ),
-        func(
-            "eval",
-            |args: &[LispValue], env: &LispEnv| -> Result<LispValue, EvalError> {
-                if args.len() != 1 {
-                    return Err(eval_err("[readf] Wrong number of arguments"));
-                }
-                env.eval(&env.eval(&args[0])?)
-            },
-        ),
-        func(
-            "let",
+            "cons",
             |args: &[LispValue], env: &LispEnv| -> Result<LispValue, EvalError> {
                 if args.len() != 2 {
-                    return Err(eval_err("[let] Wrong number of arguments"));
+                    return Err(eval_err("[cons] Wrong number of arguments"));
                 }
-
-                let bindings_list = env.eval(&args[0])?;
-
-                let mut names = vec![];
-                let mut values = vec![];
-
-                //eprintln!("{}", &bindings_list);
-
-                match &bindings_list {
-                    LispValue::List(l) => {
-                        for b in l.iter() {
-                            match b {
-                                LispValue::List(binding) => {
-                                    if binding.len() != 2 {
-                                        return Err(eval_err("[let] Wrong argument format"));
-                                    }
-                                    names.push(binding[0].clone());
-                                    values.push(env.eval(&binding[1])?);
-                                }
-                                _ => {
-                                    return Err(eval_err(
-                                        "[let] Wrong argument type (not list of list)",
-                                    ))
-                                }
-                            }
-                        }
-                    }
-                    _ => return Err(eval_err("[let] Wrong argument type (not list)")),
-                }
-
-                env.new_inner_env(Arc::new(LispValue::List(names.into())), &values)?
-                    .eval(&args[1])
-            },
-        ),
-        func(
-            "include",
-            |args: &[LispValue], env: &LispEnv| -> Result<LispValue, EvalError> {
-                if args.len() != 2 {
-                    eprintln!("{} args", args.len());
-                    return Err(eval_err("[include] Wrong number of arguments"));
-                }
-                match crate::parse_eval(&format!("(let (readf {}) {})", &args[0], &args[1]), env) {
-                    Err(e) => panic!("{}", e),
-                    Ok(ok) => Ok(ok),
-                }
-            },
-        ),
-        func(
-            "quote",
-            |args: &[LispValue], _env: &LispEnv| -> Result<LispValue, EvalError> {
-                if args.len() != 1 {
-                    return Err(eval_err("[quote] Wrong number of arguments"));
-                }
-                Ok(args[0].clone())
+                LispValue::cons(&env.eval(&args[0])?, &env.eval(&args[1])?)
+                    .ok_or(eval_err("[cons] tail not a list"))
             },
         ),
         func(
@@ -394,13 +363,12 @@ pub fn default_env<'a>() -> LispEnv<'a> {
             },
         ),
         func(
-            "cons",
-            |args: &[LispValue], env: &LispEnv| -> Result<LispValue, EvalError> {
-                if args.len() != 2 {
-                    return Err(eval_err("[cons] Wrong number of arguments"));
+            "quote",
+            |args: &[LispValue], _env: &LispEnv| -> Result<LispValue, EvalError> {
+                if args.len() != 1 {
+                    return Err(eval_err("[quote] Wrong number of arguments"));
                 }
-                LispValue::cons(&env.eval(&args[0])?, &env.eval(&args[1])?)
-                    .ok_or(eval_err("[cons] tail not a list"))
+                Ok(args[0].clone())
             },
         ),
         func(
@@ -443,6 +411,38 @@ pub fn default_env<'a>() -> LispEnv<'a> {
             },
         ),
         func(
+            "macro",
+            |args: &[LispValue], _env: &LispEnv| -> Result<LispValue, EvalError> {
+                if args.len() != 2 {
+                    return Err(eval_err("[macro] Wrong number of arguments"));
+                }
+                if !args[0].is_list_of_symbols() {
+                    return Err(eval_err("[macro] Wrong argument type"));
+                }
+                let a = args[0].get_list().unwrap().to_owned();
+                let b = args[1].clone();
+                Ok(Macro(crate::lisp::MacroValue::new(a.into(), Arc::new(b))))
+            },
+        ),
+        func(
+            "fn",
+            |args: &[LispValue], env: &LispEnv| -> Result<LispValue, EvalError> {
+                if args.len() != 2 {
+                    return Err(eval_err("[fn] Wrong number of arguments"));
+                }
+                if !args[0].is_list_of_symbols() {
+                    return Err(eval_err("[fn] Wrong argument type"));
+                }
+                let a = args[0].clone();
+                let b = args[1].clone();
+                Ok(Lambda(LambdaValue::new(
+                    Arc::new(a),
+                    Arc::new(b),
+                    env.flatten(),
+                )))
+            },
+        ),
+        func(
             "lt",
             |args: &[LispValue], env: &LispEnv| -> Result<LispValue, EvalError> {
                 if args.len() != 2 {
@@ -457,6 +457,23 @@ pub fn default_env<'a>() -> LispEnv<'a> {
                     .get_int()
                     .ok_or(eval_err("[lt] Wrong argument type"))?;
                 Ok(Bool(a < b))
+            },
+        ),
+        func(
+            "gt",
+            |args: &[LispValue], env: &LispEnv| -> Result<LispValue, EvalError> {
+                if args.len() != 2 {
+                    return Err(eval_err("[lt] Wrong number of arguments"));
+                }
+                let a = env
+                    .eval(&args[0])?
+                    .get_int()
+                    .ok_or(eval_err("[lt] Wrong argument type"))?;
+                let b = env
+                    .eval(&args[1])?
+                    .get_int()
+                    .ok_or(eval_err("[lt] Wrong argument type"))?;
+                Ok(Bool(a > b))
             },
         ),
         func(
@@ -490,24 +507,6 @@ pub fn default_env<'a>() -> LispEnv<'a> {
             },
         ),
         func(
-            "fn",
-            |args: &[LispValue], env: &LispEnv| -> Result<LispValue, EvalError> {
-                if args.len() != 2 {
-                    return Err(eval_err("[fn] Wrong number of arguments"));
-                }
-                if !args[0].is_list_of_symbols() {
-                    return Err(eval_err("[fn] Wrong argument type"));
-                }
-                let a = args[0].clone();
-                let b = args[1].clone();
-                Ok(Lambda(LambdaValue::new(
-                    Arc::new(a),
-                    Arc::new(b),
-                    env.flatten(),
-                )))
-            },
-        ),
-        func(
             "list",
             |args: &[LispValue], env: &LispEnv| -> Result<LispValue, EvalError> {
                 let mut v = Vec::with_capacity(args.len());
@@ -518,53 +517,199 @@ pub fn default_env<'a>() -> LispEnv<'a> {
             },
         ),
         func(
+            "let",
+            |args: &[LispValue], env: &LispEnv| -> Result<LispValue, EvalError> {
+                if args.len() != 2 {
+                    return Err(eval_err("[let] Wrong number of arguments"));
+                }
+
+                let bindings_list = env.eval(&args[0])?;
+
+                let mut names = vec![];
+                let mut values = vec![];
+
+                //eprintln!("{}", &bindings_list);
+
+                match &bindings_list {
+                    LispValue::List(l) => {
+                        for b in l.iter() {
+                            match b {
+                                LispValue::List(binding) => {
+                                    if binding.len() != 2 {
+                                        return Err(eval_err("[let] Wrong argument format"));
+                                    }
+                                    names.push(binding[0].clone());
+                                    values.push(env.eval(&binding[1])?);
+                                }
+                                _ => {
+                                    return Err(eval_err(
+                                        "[let] Wrong argument type (not list of list)",
+                                    ))
+                                }
+                            }
+                        }
+                    }
+                    _ => {
+                        return Err(EvalError::String(format!(
+                            "[let] Wrong argument type: [[{}]]",
+                            bindings_list
+                        )))
+                    }
+                }
+
+                env.new_inner_env(Arc::new(LispValue::List(names.into())), &values)?
+                    .eval(&args[1])
+            },
+        ),
+        func(
+            "eval",
+            |args: &[LispValue], env: &LispEnv| -> Result<LispValue, EvalError> {
+                if args.len() != 1 {
+                    return Err(eval_err("[eval] Wrong number of arguments"));
+                }
+                env.eval(&env.eval(&args[0])?)
+            },
+        ),
+        func(
             "unsafe",
-            |_args: &[LispValue], _env: &LispEnv| -> Result<LispValue, EvalError> { Ok(().into()) },
+            |args: &[LispValue], env: &LispEnv| -> Result<LispValue, EvalError> {
+                if args.len() != 1 {
+                    return Err(eval_err("[unsafe] Wrong number of arguments"));
+                }
+
+                let inner_env = env.new_unsafer_env();
+
+                Ok(inner_env.eval(&args[0])?)
+
+                /*
+                let val = env.eval(&args[0])?;
+                if let UnsafeCall(list) = val {
+                    if list.len() == 0 {
+                        return Ok(().into());
+                    } else {
+                        let f = env.eval(&list[0])?;
+                        Ok(env.apply(&f, &list[1..])?)
+                    }
+                } else {
+                    Ok(val)
+                }
+                */
+                /*
+                if let Some(list) = val.get_list() {
+                    if list.len() == 0 {
+                        return Ok(().into());
+                    } else {
+                        let f = env.eval(&list[0])?;
+                        Ok(env.apply(&f, &list[1..])?)
+                    }
+                } else {
+                    Ok(val)
+                }
+                */
+            },
+        ),
+        unsafe_func(
+            "spookyAdd",
+            |args: &[LispValue], env: &LispEnv| -> Result<LispValue, EvalError> {
+                if args.len() != 2 {
+                    return Err(eval_err("[sub] Wrong number of arguments"));
+                }
+                let a = env
+                    .eval(&args[0])?
+                    .get_int()
+                    .ok_or(eval_err("[sub] Wrong argument type"))?;
+                let b = env
+                    .eval(&args[1])?
+                    .get_int()
+                    .ok_or(eval_err("[sub] Wrong argument type"))?;
+                Ok(Integer(a + b))
+            },
         ),
         unsafe_func("lua", lua::run_lua_file_from_lisp_args),
-        /*unsafe_func(
-            "lua",
+        unsafe_func(
+            "readf",
             |args: &[LispValue], env: &LispEnv| -> Result<LispValue, EvalError> {
-                use std::process::Command;
-
-                if args.len() != 1 {
-                    return Err(eval_err("[lua] Wrong number of arguments"));
-                }
-
-                fn get_lua_lib_filename(lib_name: &str) -> String {
-                    format!("src/{}.lua", lib_name)
-                }
-
-                let a = env.eval(&args[0])?;
-
-                let lib_name = a
-                    .get_symbol()
-                    .ok_or(eval_err("argument to lua not a symbol"))?;
-
-                let filename = get_lua_lib_filename(lib_name);
-
-                let mut child = Command::new("lua")
-                    .arg(&filename)
-                    .spawn()
-                    .expect("Lua failed to start");
-
-                let _ecode = child.wait().expect("failed to wait on child");
-
-                Ok(().into())
+                let filename = match args.len() {
+                    1 => {
+                        if let LispValue::Symbol(package) = env.eval(&args[0])? {
+                            format!("lisb/{}.l", package)
+                        } else {
+                            return Err(eval_err("[readf] Wrong argument type (single argument)"));
+                        }
+                    }
+                    2 => {
+                        if let LispValue::Symbol(main) = env.eval(&args[0])? {
+                            if let LispValue::Symbol(ext) = env.eval(&args[1])? {
+                                format!("lisb/{}.{}", main, ext)
+                            } else {
+                                return Err(eval_err("[readf] Wrong argument type (first of two)"));
+                            }
+                        } else {
+                            return Err(eval_err("[readf] Wrong argument type (second of two)"));
+                        }
+                    }
+                    3 => {
+                        if let LispValue::Symbol(folder) = env.eval(&args[0])? {
+                            if let LispValue::Symbol(main) = env.eval(&args[1])? {
+                                if let LispValue::Symbol(ext) = env.eval(&args[2])? {
+                                    format!("{}/{}.{}", folder, main, ext)
+                                } else {
+                                    return Err(eval_err(
+                                        "[readf] Wrong argument type (first of three)",
+                                    ));
+                                }
+                            } else {
+                                return Err(eval_err(
+                                    "[readf] Wrong argument type (second of three)",
+                                ));
+                            }
+                        } else {
+                            return Err(eval_err("[readf] Wrong argument type (third of three)"));
+                        }
+                    }
+                    _ => return Err(eval_err("[readf] Wrong number of arguments")),
+                };
+                let source = std::fs::read_to_string(&filename).expect("[readf] IO error");
+                let data = crate::parse_string(&source).expect("[readf] Parse error");
+                //~ Ok(env.eval(&data)?)
+                Ok(data)
             },
-        ),*/
+        ),
+        unsafe_func(
+            "include",
+            |args: &[LispValue], env: &LispEnv| -> Result<LispValue, EvalError> {
+                if args.len() != 2 {
+                    eprintln!("{} args", args.len());
+                    return Err(eval_err("[include] Wrong number of arguments"));
+                }
+
+                /*
+                let filename = if let LispValue::Symbol(package) = env.eval(&args[0])? {
+                    format!("lisb/{}.l", package)
+                } else {
+                    return Err(eval_err("[include] Wrong argument type (first of three)"));
+                };
+
+                let source = std::fs::read_to_string(&filename).expect("[include] IO error");
+                let data = crate::parse_string(&source).expect("[include] Parse error");
+                &data
+                */
+
+                match crate::parse_eval(&format!("(let (readf {}) {})", &args[0], &args[1]), &env) {
+                    Err(e) => panic!("{}", e),
+                    Ok(ok) => Ok(ok),
+                }
+            },
+        ),
         /*
         func(
             "",
             |_args: &[LispValue], _env: &LispEnv| -> Result<LispValue, EvalError> {
-                Ok(())
+                todo!()
             },
         ),
         */
     ]);
 
-    LispEnv {
-        bindings,
-        outer: None,
-    }
+    LispEnv::from_hashmap(bindings)
 }

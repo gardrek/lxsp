@@ -12,6 +12,20 @@ local _G = _G
 local error = error
 local rawset = rawset
 local rawget = rawget
+local getmetatable = getmetatable
+local setmetatable = setmetatable
+
+local mt = getmetatable(_G)
+
+if mt == nil then
+    mt = {}
+    setmetatable(_G, mt)
+elseif type(mt) == "table" then
+    local already_global = rawget(mt, "global")
+    if type(already_global) == "function" then
+        return already_global
+    end
+end
 
 local function global(key, value)
     if value ~= nil then
@@ -21,26 +35,22 @@ local function global(key, value)
     end
 end
 
-local mt = getmetatable(_G)
-
-if mt == nil then
-    mt = {}
-    setmetatable(_G, mt)
-end
+mt.global = global
 
 mt.__newindex = function(self, key, value)
-    if global("_ALLOW_GLOBAL_NEWINDEX") then
+    if global"_ALLOW_GLOBAL_NEWINDEX" then
         rawset(self, key, value)
     else
-        error('attempt to set uninitialized global ""' .. tostring(key) .. '": "' .. tostring(value) .. '"', 2)
+        error('attempt to set uninitialized global "' .. tostring(key) .. '": "' .. tostring(value) .. '"', 2)
     end
 end
 
 mt.__index = function(self, key)
-    if global("_ALLOW_GLOBAL_INDEX") then
+    print("GMT INDEX " .. key)
+    if global"_ALLOW_GLOBAL_INDEX" then
         return rawget(self, key)
     else
-        error('No Globals is in effect ' .. tostring(key), 2)
+        error("Attempt to access global '" .. tostring(key) .. "' while No Globals is in effect", 2)
     end
 end
 
