@@ -5,8 +5,6 @@ mod scan;
 mod tests;
 mod value;
 
-pub(crate) use value as lisp;
-
 //~ use std::io::Read;
 //~ use std::io::Write;
 use std::error::Error;
@@ -91,6 +89,10 @@ fn print_error(session: &cli::Session, error: &str) -> Result<(), Box<dyn Error>
 fn main() -> Result<(), Box<dyn Error>> {
     let args = cli::ArgStruct::parse();
 
+    if args.use_old_repl {
+        return old_main()
+    }
+
     BASE_ENV.set(LispEnv::default()).unwrap();
 
     let base_env = BASE_ENV.get().unwrap();
@@ -130,6 +132,8 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let session = Session::new();
 
+    ////////////////////////////////////////////////////////////////
+    // Main Loop                                                  //
     ////////////////////////////////////////////////////////////////
 
     let mut rl = rustyline::Editor::<()>::new();
@@ -178,7 +182,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     }
 }
 
-fn _main() -> Result<(), Box<dyn Error>> {
+fn old_main() -> Result<(), Box<dyn Error>> {
     let args = cli::ArgStruct::parse();
 
     BASE_ENV.set(LispEnv::default()).unwrap();

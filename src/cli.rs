@@ -12,6 +12,8 @@ pub struct ArgStruct {
     pub nostd: bool,
     #[arg(long)]
     pub load: Vec<String>,
+    #[arg(long)]
+    pub use_old_repl: bool,
 }
 
 // TUI //
@@ -97,7 +99,7 @@ impl Drop for Session {
 #[derive(Debug, Default)]
 pub struct CommandHistory {
     index: usize,
-    front_buffer: String,
+    _front_buffer: String,
     back_buffer: Option<String>,
     ordered_commands: Vec<String>,
     command_set: Vec<String>,
