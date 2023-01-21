@@ -1,16 +1,17 @@
 use super::value::Value as LispValue;
 use super::value::LambdaValue;
 use super::value::MacroValue;
+use super::value::FuncValue;
 use std::collections::HashMap;
 use std::sync::Arc;
 
 mod lua;
 
-pub type Bindings = HashMap<String, LispValue>;
+pub type Bindings<'v> = HashMap<String, LispValue<'v>>;
 
 #[derive(Debug)]
 pub struct LispEnv<'e> {
-    bindings: HashMap<String, LispValue>,
+    bindings: HashMap<String, LispValue<'e>>,
     outer: Option<&'e LispEnv<'e>>,
     unsafe_level: usize,
 }
@@ -40,7 +41,7 @@ impl LispEnv<'_> {
         LispEnv::from_hashmap(HashMap::new())
     }
 
-    fn from_hashmap(bindings: HashMap<String, LispValue>) -> LispEnv<'static> {
+    fn from_hashmap<'e>(bindings: Bindings<'e>) -> LispEnv<'e> {
         LispEnv {
             bindings,
             outer: None,
@@ -315,14 +316,14 @@ pub fn default_env<'a>() -> LispEnv<'a> {
 
     fn func(
         s: &'static str,
-        f: fn(&[LispValue], &LispEnv) -> Result<LispValue, EvalError>,
+        f: FuncValue,
     ) -> (String, LispValue) {
         (s.into(), Func(f))
     }
 
     fn unsafe_func(
         s: &'static str,
-        f: fn(&[LispValue], &LispEnv) -> Result<LispValue, EvalError>,
+        f: FuncValue,
     ) -> (String, LispValue) {
         (s.into(), UnsafeFunc(f))
     }

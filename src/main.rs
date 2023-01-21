@@ -5,8 +5,6 @@ mod scan;
 mod tests;
 mod value;
 
-pub(crate) use value as lisp;
-
 //~ use std::io::Read;
 //~ use std::io::Write;
 use std::error::Error;
@@ -28,7 +26,7 @@ pub static BASE_ENV: OnceCell<LispEnv<'_>> = OnceCell::new();
 
 pub static STD_ENV: OnceCell<LispEnv<'_>> = OnceCell::new();
 
-pub fn parse_eval(source: &str, env: &LispEnv) -> Result<LispValue, Box<dyn Error>> {
+pub fn parse_eval<'v>(source: &str, env: &LispEnv) -> Result<LispValue<'v>, Box<dyn Error>> {
     Ok(env.eval(&parse_string(&source)?)?)
 }
 

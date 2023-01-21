@@ -3,20 +3,23 @@ use super::eval::EvalError;
 use super::eval::LispEnv as LispEnv;
 use std::sync::Arc;
 
-type ListValue = Arc<[Value]>;
+type ListValue<'v> = Arc<[Value<'v>]>;
+
+pub type FuncValue = for<'e> fn(&[Value], &'e LispEnv) -> Result<Value<'e>, EvalError>;
+//type FuncValue = for<'v> fn(&[Value], &LispEnv) -> Result<Value<'v>, EvalError>;
 
 #[derive(Clone)]
-pub enum Value {
+pub enum Value<'e> {
     Bool(bool),
     Integer(i64),
     Symbol(String),
-    List(ListValue),
-    Macro(MacroValue),
-    Func(fn(&[Value], &LispEnv) -> Result<Value, EvalError>),
-    UnsafeFunc(fn(&[Value], &LispEnv) -> Result<Value, EvalError>),
-    Lambda(LambdaValue),
-    //~ Env(Arc<LispEnv<'static>>),
-    UnsafeCall(ListValue),
+    List(ListValue<'e>),
+    Func(FuncValue),
+    UnsafeFunc(FuncValue),
+    Macro(MacroValue<'e>),
+    Lambda(LambdaValue<'e>),
+    Env(Arc<LispEnv<'e>>),
+    UnsafeCall(ListValue<'e>),
     // Partially evaluated value
     //~ Partial(Partial),
 }
@@ -24,26 +27,26 @@ pub enum Value {
 //~ pub struct Partial {}
 
 #[derive(Clone)]
-pub struct MacroValue {
-    pub args: ListValue,
-    pub body: Arc<Value>,
+pub struct MacroValue<'v> {
+    pub args: ListValue<'v>,
+    pub body: Arc<Value<'v>>,
 }
 
 #[derive(Clone)]
-pub struct LambdaValue {
-    pub args: Arc<Value>,
-    pub body: Arc<Value>,
-    pub closure: Bindings,
+pub struct LambdaValue<'v> {
+    pub args: Arc<Value<'v>>,
+    pub body: Arc<Value<'v>>,
+    pub closure: Bindings<'v>,
 }
 
-impl MacroValue {
-    pub fn new(args: ListValue, body: Arc<Value>) -> MacroValue {
+impl MacroValue<'_> {
+    pub fn new<'e>(args: ListValue, body: Arc<Value>) -> MacroValue<'e> {
         MacroValue { args, body }
     }
 }
 
-impl LambdaValue {
-    pub fn new(args: Arc<Value>, body: Arc<Value>, closure: Bindings) -> LambdaValue {
+impl LambdaValue<'_> {
+    pub fn new<'e>(args: Arc<Value>, body: Arc<Value>, closure: Bindings) -> LambdaValue<'e> {
         LambdaValue {
             args,
             body,
@@ -52,7 +55,7 @@ impl LambdaValue {
     }
 }
 
-impl Value {
+impl Value<'_> {
     pub fn fallible_clone(&self) -> Result<Value, EvalError> {
         use Value::*;
 
@@ -70,7 +73,7 @@ impl Value {
         })
     }
 
-    pub fn cons(head: &Value, tail: &Value) -> Option<Value> {
+    pub fn cons<'v>(head: &Value, tail: &Value) -> Option<Value<'v>> {
         //~ // TODO: fancy iterator chain version
         //~ Some(iter::once(x).chain(arc.iter()).collect())
         let mut list = vec![head.clone()];
@@ -105,7 +108,7 @@ impl Value {
         Value::List(vec![Value::Symbol("quote".into()), v].into())
     }
 
-    pub fn nil() -> Value {
+    pub fn nil() -> Value<'static> {
         Value::List(Arc::new([]))
     }
 
@@ -182,7 +185,7 @@ impl Value {
     }
 }
 
-impl PartialEq for Value {
+impl PartialEq for Value<'_> {
     fn eq(&self, other: &Self) -> bool {
         use Value::*;
         match (self, other) {
@@ -215,13 +218,13 @@ impl PartialEq for Value {
 // Do not uncomment unless PartialEq is modified to be reflexive
 //impl Eq for Value {}
 
-impl core::fmt::Debug for Value {
+impl core::fmt::Debug for Value<'_> {
     fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
         write!(f, "{}", &self)
     }
 }
 
-impl core::fmt::Display for Value {
+impl core::fmt::Display for Value<'_> {
     fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
         use Value::*;
         match self {
@@ -264,26 +267,26 @@ fn display(val: &Value) {
 }
 */
 
-impl From<()> for Value {
-    fn from(_v: ()) -> Value {
+impl From<()> for Value<'_> {
+    fn from(_v: ()) -> Value<'static> {
         Value::nil()
     }
 }
 
-impl From<bool> for Value {
-    fn from(v: bool) -> Value {
+impl From<bool> for Value<'_> {
+    fn from(v: bool) -> Value<'static> {
         Value::Bool(v)
     }
 }
 
-impl From<i64> for Value {
-    fn from(v: i64) -> Value {
+impl From<i64> for Value<'_> {
+    fn from(v: i64) -> Value<'static> {
         Value::Integer(v)
     }
 }
 
-impl From<&str> for Value {
-    fn from(v: &str) -> Value {
+impl From<&str> for Value<'_> {
+    fn from(v: &str) -> Value<'static> {
         Value::Symbol(v.to_string())
     }
 }

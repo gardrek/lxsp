@@ -6,7 +6,7 @@ use crate::value::Value as LispValue;
 use std::process::Command;
 use std::sync::Arc;
 
-pub fn run(mut child: std::process::Child) -> Result<LispValue, EvalError> {
+pub fn run<'v>(mut child: std::process::Child) -> Result<LispValue<'v>, EvalError> {
     let error_status = child.wait().expect("failed to wait on child");
 
     let code = error_status.code();
@@ -42,10 +42,10 @@ pub fn run_lua_file(filename: &str) -> Result<LispValue, EvalError> {
     run(child)
 }
 
-pub fn run_lua_file_from_lisp_args(
-    args: &[LispValue],
-    env: &LispEnv,
-) -> Result<LispValue, EvalError> {
+pub fn run_lua_file_from_lisp_args<'e>(
+    args: &[LispValue<'e>],
+    env: &LispEnv<'e>,
+) -> Result<LispValue<'e>, EvalError> {
     if args.len() != 1 {
         return Err(eval_err("[lua] Wrong number of arguments"));
     }

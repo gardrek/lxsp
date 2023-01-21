@@ -83,7 +83,7 @@ fn read_seq<'a>(tokens: &'a [Token]) -> Result<(Value, &'a [Token]), ParseError>
     }
 }
 
-fn parse_atom(token: &str, is_number: &bool) -> Value {
+fn parse_atom(token: &str, is_number: &bool) -> Value<'static> {
     match is_number {
         true => match token.parse::<i64>() {
             Ok(v) => Value::Integer(v),
