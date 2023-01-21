@@ -1,4 +1,4 @@
-use super::lisp::Value;
+use super::value::Value;
 use super::scan;
 use scan::{Token, TokenPayload};
 /*
@@ -49,14 +49,14 @@ pub fn parse<'a>(tokens: &'a [Token]) -> Result<(Value, &'a [Token]), ParseError
     match &token.payload {
         LeftParen => read_seq(rest),
         RightParen => Err(ParseError::Reason("unexpected `)`".to_string())),
-        Atom(s) => Ok((parse_atom(&s), rest)),
+        Atom(s, is_number) => Ok((parse_atom(&s, is_number), rest)),
         Quote(inner) => match &**inner {
             LeftParen => {
                 let (val, rest) = read_seq(rest)?;
                 Ok((Value::quoted(val), rest))
             }
-            Atom(s) => Ok((Value::quoted(parse_atom(&s)), rest)),
-            /*
+            Atom(s, is_number) => Ok((Value::quoted(parse_atom(&s, is_number)), rest)),
+            /*..
             Quote(q) => {
                 let (token, _) = parse(&[q])?;
                 Ok((Value::quoted(), rest))
@@ -83,9 +83,12 @@ fn read_seq<'a>(tokens: &'a [Token]) -> Result<(Value, &'a [Token]), ParseError>
     }
 }
 
-fn parse_atom(token: &str) -> Value {
-    match token.parse::<i64>() {
-        Ok(v) => Value::Integer(v),
-        Err(_) => Value::Symbol(token.to_string().clone()),
+fn parse_atom(token: &str, is_number: &bool) -> Value {
+    match is_number {
+        true => match token.parse::<i64>() {
+            Ok(v) => Value::Integer(v),
+            Err(e) => panic!("{:?}", e),
+        },
+        false => Value::Symbol(token.to_string().clone()),
     }
 }

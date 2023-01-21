@@ -1,7 +1,7 @@
 use crate::eval::eval_err;
 use crate::eval::EvalError;
 use crate::eval::LispEnv;
-use crate::lisp::Value as LispValue;
+use crate::value::Value as LispValue;
 
 use std::process::Command;
 use std::sync::Arc;

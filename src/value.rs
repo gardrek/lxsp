@@ -1,6 +1,6 @@
 use super::eval::Bindings;
 use super::eval::EvalError;
-use super::eval::LispEnv;
+use super::eval::LispEnv as LispEnv;
 use std::sync::Arc;
 
 type ListValue = Arc<[Value]>;

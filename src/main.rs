@@ -1,29 +1,38 @@
 mod cli;
 mod eval;
-mod lisp;
 mod parse;
 mod scan;
 mod tests;
+mod value;
+
+pub(crate) use value as lisp;
 
 //~ use std::io::Read;
 //~ use std::io::Write;
-use terminal::{Action, Color};
+use std::error::Error;
+
+use cli::CommandHistory;
+use cli::Session;
+use terminal::Action;
+use terminal::Color;
+use terminal::KeyModifiers;
+use terminal::Retrieved;
 
 use clap::Parser;
 use once_cell::sync::OnceCell;
 
-use eval::LispEnv;
-use lisp::Value as LispValue;
+use eval::LispEnv as LispEnv;
+use value::Value as LispValue;
 
 pub static BASE_ENV: OnceCell<LispEnv<'_>> = OnceCell::new();
 
 pub static STD_ENV: OnceCell<LispEnv<'_>> = OnceCell::new();
 
-pub fn parse_eval(source: &str, env: &LispEnv) -> Result<LispValue, Box<dyn std::error::Error>> {
+pub fn parse_eval(source: &str, env: &LispEnv) -> Result<LispValue, Box<dyn Error>> {
     Ok(env.eval(&parse_string(&source)?)?)
 }
 
-pub fn parse_string(source: &str) -> Result<LispValue, Box<dyn std::error::Error>> {
+pub fn parse_string(source: &str) -> Result<LispValue, Box<dyn Error>> {
     let scanner = scan::Scanner::new(source);
 
     let tokens = scanner.collect::<Vec<_>>();
@@ -33,6 +42,7 @@ pub fn parse_string(source: &str) -> Result<LispValue, Box<dyn std::error::Error
     Ok(parsed_exp)
 }
 
+/*
 fn input_line() -> String {
     let mut line = String::new();
 
@@ -42,17 +52,15 @@ fn input_line() -> String {
 
     line
 }
+*/
 
-fn add_lib<'e, 's>(
-    base_env: &'e LispEnv,
-    src: &'s str,
-) -> Result<LispEnv<'e>, Box<dyn std::error::Error>> {
+fn add_lib<'e, 's>(base_env: &'e LispEnv, src: &'s str) -> Result<LispEnv<'e>, Box<dyn Error>> {
     let pairs = parse_string(&src)?;
 
     Ok(base_env.new_inner_from_pairs(&pairs)?)
 }
 
-fn print_prompt(session: &cli::Session) -> Result<(), Box<dyn std::error::Error>> {
+fn print_prompt(session: &cli::Session) -> Result<(), Box<dyn Error>> {
     session
         .terminal
         .act(Action::SetForegroundColor(Color::Blue))?;
@@ -66,7 +74,7 @@ fn print_prompt(session: &cli::Session) -> Result<(), Box<dyn std::error::Error>
     Ok(())
 }
 
-fn print_error(session: &cli::Session, error: &str) -> Result<(), Box<dyn std::error::Error>> {
+fn print_error(session: &cli::Session, error: &str) -> Result<(), Box<dyn Error>> {
     session
         .terminal
         .act(Action::SetForegroundColor(Color::Red))?;
@@ -80,7 +88,7 @@ fn print_error(session: &cli::Session, error: &str) -> Result<(), Box<dyn std::e
     Ok(())
 }
 
-fn main() -> Result<(), Box<dyn std::error::Error>> {
+fn main() -> Result<(), Box<dyn Error>> {
     let args = cli::ArgStruct::parse();
 
     BASE_ENV.set(LispEnv::default()).unwrap();
@@ -120,59 +128,155 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("---");
     println!();
 
-    use cli::Session;
-    use terminal::Retrieved;
+    let session = Session::new();
+
+    ////////////////////////////////////////////////////////////////
+
+    let mut rl = rustyline::Editor::<()>::new();
+
+    rl.history_mut().set_max_len(500);
+
+    'main: loop {
+        //print_prompt(&session)?;
+
+        session
+            .terminal
+            .act(Action::SetForegroundColor(Color::Blue))?;
+
+        //print!("{}", error);
+        let readline = rl.readline("λ \x1b[0m");
+
+        session
+            .terminal
+            .act(Action::SetForegroundColor(Color::Reset))?;
+
+        match readline {
+            Ok(raw_line) => {
+                let line = raw_line.trim();
+
+                if line.is_empty() {
+                    continue;
+                //} else if line == "exit" {
+                //    break 'main Ok(());
+                }
+
+                let result = parse_eval(&line, env);
+                match result {
+                    Ok(res) => {
+                        print!("\r => {}\r\n", res);
+                        if res == LispValue::Symbol("exit".to_string()) {
+                            break 'main Ok(());
+                        }
+                    }
+                    Err(e) => print_error(&session, &format!("\r[ERROR] {}\r\n", e))?,
+                }
+
+                rl.history_mut().add(line);
+            }
+            Err(_) => break 'main Ok(()),
+        }
+    }
+}
+
+fn _main() -> Result<(), Box<dyn Error>> {
+    let args = cli::ArgStruct::parse();
+
+    BASE_ENV.set(LispEnv::default()).unwrap();
+
+    let base_env = BASE_ENV.get().unwrap();
+
+    let env = if args.nostd {
+        base_env
+    } else {
+        let src = std::fs::read_to_string("lisb/std.l")?;
+        //~ let src = std::fs::read_to_string("lisb/lam.l")?;
+
+        let std_inner = add_lib(&base_env, &src)?;
+
+        STD_ENV.set(std_inner).unwrap();
+
+        STD_ENV.get().unwrap()
+    };
+
+    let built_ins = base_env.sorted_list();
+
+    print!("Built-ins: ");
+    for s in &built_ins {
+        print!("{} ", s);
+    }
+    println!();
+
+    let std_bindings = env.sorted_list();
+
+    print!("Standard Library: ");
+    for s in &std_bindings {
+        print!("{} ", s);
+    }
+    println!();
+
+    println!();
+    println!("---");
+    println!();
 
     let session = Session::new();
 
-    /*
-    let mut buf = [0; 1];
-    while io::stdin().read(&mut buf).expect("Failed to read line") == 1
-        && buf != [b'q']
-        && buf != [3]
-    {
-        let character = buf[0] as char;
-        print!("len: {}\r\n", buf.len());
-        if character.is_control() {
-            print!("control {}\r\n", character as u8)
-        } else {
-            print!("char {}\r\n", character)
-        }
-    }
-    */
-
     let mut command_buffer = String::new();
+    let mut cursor_index = 0;
     let mut cursor_position = (0u16, 0u16);
+    let mut command_history = CommandHistory::new();
 
     print_prompt(&session)?;
 
+    // this won't work because it mutably borrows stuff for the whole loop i guess
+    // maybe some sort of internal mutability is in order?
+    /*let reset_prompt = || -> Result<(), Box<dyn Error>> {
+        command_buffer.clear();
+        print_prompt(&session)?;
+        Ok(())
+    };*/
+
     'main: loop {
-        match session.wait_for_event()? {
+        //~ let result = session.wait_for_event(Some(std::time::Duration::from_millis(5)));
+        let result = session.wait_for_event(None);
+        let ok = if let Ok(ok) = result {
+            ok
+        } else {
+            result?;
+            break 'main Ok(());
+        };
+        match ok {
             Retrieved::Event(Some(event)) => {
                 match event {
                     terminal::Event::Key(terminal::KeyEvent { code, modifiers }) => {
                         use terminal::KeyCode::*;
-                        let _modifiers = modifiers;
                         match code {
                             Esc => break 'main Ok(()),
                             Backspace => {
-                                if let Some(_ch) = command_buffer.pop() {
-                                    session.terminal.act(Action::MoveCursorTo(
-                                        cursor_position.0 - 1,
-                                        cursor_position.1,
-                                    ))?;
-                                    print!(" ");
-                                    session.terminal.act(Action::MoveCursorTo(
-                                        cursor_position.0 - 1,
-                                        cursor_position.1,
-                                    ))?;
-                                };
+                                if command_buffer.len() > cursor_index && cursor_index > 0 {
+                                    let ch = command_buffer.remove(cursor_index - 1);
+
+                                    if let Ok(Retrieved::CursorPosition(x, y)) =
+                                        session.get_cursor_position()
+                                    {
+                                        session.terminal.act(Action::ClearTerminal(
+                                            terminal::Clear::UntilNewLine,
+                                        ))?;
+                                        session.terminal.act(Action::MoveCursorTo(x, y))?;
+                                        print!("{}", &command_buffer[(cursor_index - 1)..]);
+                                        cursor_index -= ch.len_utf8();
+                                        session.terminal.act(Action::MoveCursorTo(x - 1, y))?;
+                                    } else {
+                                        panic!()
+                                    }
+                                }
                             }
                             Enter => {
                                 //print!("{}\r\n", command_buffer);
                                 print!("\r\n");
 
                                 let line = command_buffer.clone();
+
+                                let line = line.trim();
 
                                 if line.trim().is_empty() {
                                     command_buffer.clear();
@@ -190,16 +294,100 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                                             break 'main Ok(());
                                         }
                                     }
-                                    Err(e) => {print_error(&session, &format!("[ERROR] {}\r\n", e))?},
+                                    Err(e) => print_error(&session, &format!("[ERROR] {}\r\n", e))?,
                                 }
+
+                                command_history.push(line.to_string());
+
+                                //print!("{:?}\r\n", command_history);
+
+                                command_history.reset_buffers(&mut command_buffer);
+
+                                cursor_index = 0;
                                 command_buffer.clear();
                                 print_prompt(&session)?;
                             }
-                            Char(ch) => {
-                                command_buffer.push(ch);
-                                print!("{}", ch);
+                            Up | Down => {
+                                print!("\r"); // carriage retrun
+                                session
+                                    .terminal
+                                    .act(Action::ClearTerminal(terminal::Clear::UntilNewLine))?;
+                                match code {
+                                    Up => command_history.move_up(&mut command_buffer),
+                                    Down => command_history.move_down(&mut command_buffer),
+                                    _ => unreachable!(),
+                                }
+                                print_prompt(&session)?;
+                                print!("{}", command_buffer);
+                                cursor_index = command_buffer.len(); // just past the end
                             }
-                            _ => print!("{:?}\r\n", event),
+                            Left | Right => {
+                                if let Ok(Retrieved::CursorPosition(x, y)) =
+                                    session.get_cursor_position()
+                                {
+                                    match code {
+                                        Left => {
+                                            if cursor_index > 0 {
+                                                cursor_index -= 1;
+                                                session
+                                                    .terminal
+                                                    .act(Action::MoveCursorTo(x - 1, y))?;
+                                            }
+                                        }
+                                        Right => {
+                                            if cursor_index < command_buffer.len() {
+                                                cursor_index += 1;
+                                                session
+                                                    .terminal
+                                                    .act(Action::MoveCursorTo(x + 1, y))?;
+                                            }
+                                        }
+                                        _ => unreachable!(),
+                                    };
+                                };
+                            }
+                            Char(ch) => {
+                                if modifiers.is_empty() {
+                                    //if cursor_index < command_buffer.len() {
+                                    command_buffer.insert(cursor_index, ch);
+                                    if let Ok(Retrieved::CursorPosition(x, y)) =
+                                        session.get_cursor_position()
+                                    {
+                                        session.terminal.act(Action::MoveCursorTo(x, y))?;
+                                        print!("{}", &command_buffer[cursor_index..]);
+                                        cursor_index += ch.len_utf8();
+                                        session.terminal.act(Action::MoveCursorTo(x + 1, y))?;
+                                    }
+                                    /*} else {
+                                        cursor_index += ch.len_utf8();
+                                        command_buffer.push(ch);
+                                        print!("{}", ch);
+                                    }*/
+                                } else if modifiers.contains(KeyModifiers::CONTROL) {
+                                    let mut modifiers = modifiers.clone();
+                                    modifiers.remove(KeyModifiers::CONTROL);
+                                    if modifiers.is_empty() {
+                                        match ch {
+                                            'c' | 'd' => break 'main Ok(()),
+                                            _ => (),
+                                        }
+                                    } else {
+                                        // control+shift and control+alt an such can go here
+                                    }
+                                } else {
+                                }
+                            }
+                            _ => {
+                                session
+                                    .terminal
+                                    .act(Action::ClearTerminal(terminal::Clear::CurrentLine))?;
+                                session
+                                    .terminal
+                                    .act(Action::MoveCursorTo(0, cursor_position.1))?;
+                                print!("{:?}\r\n", event);
+                                print_prompt(&session)?;
+                                print!("{}", command_buffer);
+                            }
                         }
                     }
                     _ => {
@@ -207,11 +395,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     }
                 }
             }
-            Retrieved::Event(None) => todo!(),
+            Retrieved::Event(None) => (), // timed out, so we don't do anythihng this "frame"
             _ => (),
         };
 
-        if let Retrieved::CursorPosition(x, y) = session.get_cursor_position()? {
+        // NOTE: this silently just leaves the cursor position as old values
+        // if the read fails
+        if let Ok(Retrieved::CursorPosition(x, y)) = session.get_cursor_position() {
             cursor_position = (x, y)
         };
         //~ session.terminal.act(Action::MoveCursorTo(0, 0))?;

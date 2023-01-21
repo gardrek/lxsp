@@ -1,8 +1,8 @@
 #![cfg(test)]
 
 use super::*;
-use eval::LispEnv;
-use lisp::Value as LispValue;
+use eval::LispEnv as LispEnv;
+use value::Value as LispValue;
 //use eval::{LispEnv, EvalError};
 
 fn get_std<'a>(base_env: &'a LispEnv) -> Result<LispEnv<'a>, Box<dyn std::error::Error>> {

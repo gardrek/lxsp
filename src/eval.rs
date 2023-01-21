@@ -1,5 +1,6 @@
-use super::lisp::LambdaValue;
-use super::lisp::Value as LispValue;
+use super::value::Value as LispValue;
+use super::value::LambdaValue;
+use super::value::MacroValue;
 use std::collections::HashMap;
 use std::sync::Arc;
 
@@ -8,9 +9,9 @@ mod lua;
 pub type Bindings = HashMap<String, LispValue>;
 
 #[derive(Debug)]
-pub struct LispEnv<'a> {
+pub struct LispEnv<'e> {
     bindings: HashMap<String, LispValue>,
-    outer: Option<&'a LispEnv<'a>>,
+    outer: Option<&'e LispEnv<'e>>,
     unsafe_level: usize,
 }
 
@@ -372,6 +373,49 @@ pub fn default_env<'a>() -> LispEnv<'a> {
             },
         ),
         func(
+            "eq",
+            |args: &[LispValue], env: &LispEnv| -> Result<LispValue, EvalError> {
+                if args.len() != 2 {
+                    return Err(eval_err("[eq] Wrong number of arguments"));
+                }
+                let a = env.eval(&args[0])?;
+                let b = env.eval(&args[1])?;
+                Ok(Bool(a == b))
+            },
+        ),
+        func(
+            "macro",
+            |args: &[LispValue], _env: &LispEnv| -> Result<LispValue, EvalError> {
+                if args.len() != 2 {
+                    return Err(eval_err("[macro] Wrong number of arguments"));
+                }
+                if !args[0].is_list_of_symbols() {
+                    return Err(eval_err("[macro] Wrong argument type"));
+                }
+                let a = args[0].get_list().unwrap().to_owned();
+                let b = args[1].clone();
+                Ok(Macro(MacroValue::new(a.into(), Arc::new(b))))
+            },
+        ),
+        func(
+            "fn",
+            |args: &[LispValue], env: &LispEnv| -> Result<LispValue, EvalError> {
+                if args.len() != 2 {
+                    return Err(eval_err("[fn] Wrong number of arguments"));
+                }
+                if !args[0].is_list_of_symbols() {
+                    return Err(eval_err("[fn] Wrong argument type"));
+                }
+                let a = args[0].clone();
+                let b = args[1].clone();
+                Ok(Lambda(LambdaValue::new(
+                    Arc::new(a),
+                    Arc::new(b),
+                    env.flatten(),
+                )))
+            },
+        ),
+        func(
             "if",
             |args: &[LispValue], env: &LispEnv| -> Result<LispValue, EvalError> {
                 if args.len() != 3 {
@@ -397,49 +441,6 @@ pub fn default_env<'a>() -> LispEnv<'a> {
                 }
                 let a = env.eval(&args[0])?;
                 Ok(Bool(a.is_atom()))
-            },
-        ),
-        func(
-            "eq",
-            |args: &[LispValue], env: &LispEnv| -> Result<LispValue, EvalError> {
-                if args.len() != 2 {
-                    return Err(eval_err("[eq] Wrong number of arguments"));
-                }
-                let a = env.eval(&args[0])?;
-                let b = env.eval(&args[1])?;
-                Ok(Bool(a == b))
-            },
-        ),
-        func(
-            "macro",
-            |args: &[LispValue], _env: &LispEnv| -> Result<LispValue, EvalError> {
-                if args.len() != 2 {
-                    return Err(eval_err("[macro] Wrong number of arguments"));
-                }
-                if !args[0].is_list_of_symbols() {
-                    return Err(eval_err("[macro] Wrong argument type"));
-                }
-                let a = args[0].get_list().unwrap().to_owned();
-                let b = args[1].clone();
-                Ok(Macro(crate::lisp::MacroValue::new(a.into(), Arc::new(b))))
-            },
-        ),
-        func(
-            "fn",
-            |args: &[LispValue], env: &LispEnv| -> Result<LispValue, EvalError> {
-                if args.len() != 2 {
-                    return Err(eval_err("[fn] Wrong number of arguments"));
-                }
-                if !args[0].is_list_of_symbols() {
-                    return Err(eval_err("[fn] Wrong argument type"));
-                }
-                let a = args[0].clone();
-                let b = args[1].clone();
-                Ok(Lambda(LambdaValue::new(
-                    Arc::new(a),
-                    Arc::new(b),
-                    env.flatten(),
-                )))
             },
         ),
         func(

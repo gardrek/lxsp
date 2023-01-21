@@ -2,7 +2,8 @@
 pub enum TokenPayload {
     LeftParen,
     RightParen,
-    Atom(String),
+    //~ Atom{atom: String, is_number: bool}
+    Atom(String, bool),
     Quote(Box<TokenPayload>),
 }
 
@@ -44,7 +45,7 @@ impl core::fmt::Display for TokenPayload {
         match &self {
             LeftParen => write!(f, "("),
             RightParen => write!(f, ")"),
-            Atom(string) => write!(f, "{:?}", &string),
+            Atom(string, _bool) => write!(f, "{:?}", &string),
             Quote(token) => write!(f, "'{}", &token),
         }
     }
@@ -89,6 +90,7 @@ impl<'a> Scanner<'a> {
                     continue;
                 }
                 ch if ch.is_digit(36) => {
+                    let is_number = ch.is_digit(10);
                     let first = self.cursor;
                     let mut ch = ch;
                     let mut atom = String::new();
@@ -99,12 +101,13 @@ impl<'a> Scanner<'a> {
                             Some(ch_in) => {
                                 ch = ch_in;
                                 if ch.is_whitespace() || ch == '(' || ch == ')' {
-                                    let token = Token::new(Atom(atom), first..self.cursor);
+                                    let token =
+                                        Token::new(Atom(atom, is_number), first..self.cursor);
                                     break 'token Some(token);
                                 }
                             }
                             None => {
-                                let token = Token::new(Atom(atom), first..self.cursor);
+                                let token = Token::new(Atom(atom, is_number), first..self.cursor);
                                 break 'token Some(token);
                             }
                         }
