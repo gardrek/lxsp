@@ -17,6 +17,8 @@
 
     (truthyP (fn (x) (if (eq x false) false (not (nilP x)))))
 
+    (cond (macro (l) (list 'if (list 'eval (car (car l))) (list 'eval (car (cdr (car l)))) (list 'cond (cdr l)))))
+
     (longOr (fn (x y) (if (truthyP x) x y)))
 
     (firsts (fn (l) (if (truthyP l) (cons (car (car l)) (firsts (cdr l))) ())))
@@ -43,4 +45,3 @@
 
     (fib (fn (n) (if (eq n 0) 0 (if (eq n 1) 1 (add (fib (sub n 1)) (fib (sub n 2)))))))
 )
-

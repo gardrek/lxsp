@@ -1,9 +1,11 @@
-use super::eval::Bindings;
+use super::env::Bindings;
+use super::env::LispEnv;
 use super::eval::EvalError;
-use super::eval::LispEnv as LispEnv;
 use std::sync::Arc;
 
 type ListValue = Arc<[Value]>;
+
+type FuncValue = fn(&[Value], &LispEnv) -> Result<Value, EvalError>;
 
 #[derive(Clone)]
 pub enum Value {
@@ -12,8 +14,8 @@ pub enum Value {
     Symbol(String),
     List(ListValue),
     Macro(MacroValue),
-    Func(fn(&[Value], &LispEnv) -> Result<Value, EvalError>),
-    UnsafeFunc(fn(&[Value], &LispEnv) -> Result<Value, EvalError>),
+    Func(FuncValue),
+    UnsafeFunc(FuncValue),
     Lambda(LambdaValue),
     //~ Env(Arc<LispEnv<'static>>),
     UnsafeCall(ListValue),
@@ -25,7 +27,7 @@ pub enum Value {
 
 #[derive(Clone)]
 pub struct MacroValue {
-    pub args: ListValue,
+    pub params: ListValue,
     pub body: Arc<Value>,
 }
 
@@ -37,8 +39,8 @@ pub struct LambdaValue {
 }
 
 impl MacroValue {
-    pub fn new(args: ListValue, body: Arc<Value>) -> MacroValue {
-        MacroValue { args, body }
+    pub fn new(params: ListValue, body: Arc<Value>) -> MacroValue {
+        MacroValue { params, body }
     }
 }
 
@@ -285,5 +287,17 @@ impl From<i64> for Value {
 impl From<&str> for Value {
     fn from(v: &str) -> Value {
         Value::Symbol(v.to_string())
+    }
+}
+
+impl From<MacroValue> for Value {
+    fn from(v: MacroValue) -> Value {
+        Value::Macro(v)
+    }
+}
+
+impl From<LambdaValue> for Value {
+    fn from(v: LambdaValue) -> Value {
+        Value::Lambda(v)
     }
 }

@@ -1,5 +1,5 @@
-use super::value::Value;
 use super::scan;
+use super::value::Value;
 use scan::{Token, TokenPayload};
 /*
 pub struct Parser {

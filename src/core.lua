@@ -1,8 +1,6 @@
 
 local global = dofile"src/gmt.lua"
 
-print("core", global)
-
 local _Core = nil
 do
     local core = {
@@ -163,6 +161,8 @@ print(test_mut)
 
 local dbg = require("src.dbg")
 
+--[[
+
 print(dbg.to_debug_string('say it to my "face"'))
 print(dbg.to_debug_string('say it to my \"face\"'))
 print(dbg.to_debug_string("say it to my \"face\""))
@@ -190,3 +190,5 @@ print(f(1, "shello", false, nil, function(x) return x end))
 print(f(nil, nil, 1, "shello", false, nil, function(x) return x end))
 
 print(f(1, "shello", false, nil, function(x) return x end, nil, nil))
+
+--]]

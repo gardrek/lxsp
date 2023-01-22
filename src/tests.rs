@@ -1,7 +1,7 @@
 #![cfg(test)]
 
 use super::*;
-use eval::LispEnv as LispEnv;
+use env::LispEnv as LispEnv;
 use value::Value as LispValue;
 //use eval::{LispEnv, EvalError};
 
@@ -13,7 +13,7 @@ fn get_std<'a>(base_env: &'a LispEnv) -> Result<LispEnv<'a>, Box<dyn std::error:
 
 #[test]
 fn unsafe_call() {
-    let env = eval::LispEnv::default();
+    let env = LispEnv::default();
 
     let src = "(unsafe (spookyAdd 10 32))";
 
@@ -24,7 +24,7 @@ fn unsafe_call() {
 
 #[test]
 fn safe_unsafe_call() {
-    let env = eval::LispEnv::default();
+    let env = LispEnv::default();
 
     let src = "(unsafe (add 10 32))";
 
@@ -36,14 +36,14 @@ fn safe_unsafe_call() {
 #[test]
 
 fn lua_core() {
-    let env = eval::LispEnv::default();
+    let env = LispEnv::default();
 
     parse_eval("(unsafe (lua 'core))", &env).unwrap();
 }
 
 #[test]
 fn std_test() {
-    let base_env = eval::LispEnv::default();
+    let base_env = LispEnv::default();
 
     let env = get_std(&base_env).unwrap();
 
@@ -97,7 +97,7 @@ fn std_test() {
 
 #[test]
 fn reduce_vs_eval() {
-    let base_env = eval::LispEnv::default();
+    let base_env = LispEnv::default();
 
     let env = get_std(&base_env).unwrap();
 

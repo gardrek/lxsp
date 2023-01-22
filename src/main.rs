@@ -1,4 +1,5 @@
 mod cli;
+mod env;
 mod eval;
 mod parse;
 mod scan;
@@ -19,7 +20,7 @@ use terminal::Retrieved;
 use clap::Parser;
 use once_cell::sync::OnceCell;
 
-use eval::LispEnv as LispEnv;
+use env::LispEnv as LispEnv;
 use value::Value as LispValue;
 
 pub static BASE_ENV: OnceCell<LispEnv<'_>> = OnceCell::new();
@@ -28,6 +29,13 @@ pub static STD_ENV: OnceCell<LispEnv<'_>> = OnceCell::new();
 
 pub fn parse_eval(source: &str, env: &LispEnv) -> Result<LispValue, Box<dyn Error>> {
     Ok(env.eval(&parse_string(&source)?)?)
+}
+
+pub fn parse_eval_and_macro_pass(source: &str, env: &LispEnv) -> Result<LispValue, Box<dyn Error>> {
+    let result = parse_string(source)?;
+    let passed = env.macro_eval(&result)?;
+    Ok(env.eval(&passed)?)
+    //Ok(passed)
 }
 
 pub fn parse_string(source: &str) -> Result<LispValue, Box<dyn Error>> {
@@ -90,7 +98,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let args = cli::ArgStruct::parse();
 
     if args.use_old_repl {
-        return old_main()
+        return old_main();
     }
 
     BASE_ENV.set(LispEnv::default()).unwrap();
@@ -160,11 +168,11 @@ fn main() -> Result<(), Box<dyn Error>> {
 
                 if line.is_empty() {
                     continue;
-                //} else if line == "exit" {
-                //    break 'main Ok(());
+                    //} else if line == "exit" {
+                    //    break 'main Ok(());
                 }
 
-                let result = parse_eval(&line, env);
+                let result = parse_eval_and_macro_pass(&line, env);
                 match result {
                     Ok(res) => {
                         print!("\r => {}\r\n", res);

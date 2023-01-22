@@ -4,8 +4,6 @@ local mt = {}
 
 local global = dofile"src/gmt.lua"
 
-print("dbg", global)
-
 function dbg.to_debug_string(value)
     if false then
         error""
