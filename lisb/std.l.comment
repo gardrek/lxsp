@@ -7,26 +7,33 @@
 
     (tail cdr)
 
-    (nil (* remarks return nil currently *))
+    (nil ())
 
+    ; Deps [fn]
     (id (fn (x) x))
 
+    ; Deps [eq if true false]
     (nilP (fn (x) (if (eq x ()) true false)))
 
     (not (fn (x) (if x false true)))
 
+    ; Deps [nilP]
     (truthyP (fn (x) (if (eq x false) false (not (nilP x)))))
 
+    ; Deps [truthyP]
     (longOr (fn (x y) (if (truthyP x) x y)))
 
+    ; deps [truthyP cons car cdr]
     (firsts (fn (l) (if (truthyP l) (cons (car (car l)) (firsts (cdr l))) ())))
 
     (seconds (fn (l) (if (truthyP l) (cons (car (cdr (car l))) (seconds (cdr l))) ())))
 
+    ; Deps [add sub]
     (mul (let 
         '((mulRecurse (fn (x y) (if (lt x 1) 0 (add y (mulRecurse (sub x 1) y))))))
         (fn (x y) (if (lt x y) (mulRecurse x y) (mulRecurse y x)))))
 
+    ; Deps [let lt]
     (div (let '((
         divRecurse
         (fn
@@ -43,6 +50,7 @@
 
     (fib (fn (n) (if (eq n 0) 0 (if (eq n 1) 1 (add (fib (sub n 1)) (fib (sub n 2)))))))
 
+    ; Deps [macro]
     (cond (macro (l)
         (list 'if (truthyP l) (list 'if (list 'eval (car (car l))) (list 'eval (car (cdr (car l)))) (list 'cond (cdr l))) ())
     ))

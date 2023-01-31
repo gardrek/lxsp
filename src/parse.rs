@@ -1,30 +1,7 @@
 use super::scan;
 use super::value::Value;
 use scan::{Token, TokenPayload};
-/*
-pub struct Parser {
-    list_stack: Vec<Vec<Value>>,
-    current_list: Optin<Vec<Value>>,
-    list: Vec<Value>,
-}
 
-impl Parser {
-    fn parse_token(&mut self, token: Token) {
-        match token {
-            LeftParen => {
-                let list = vec![];
-                self.current_value = Some(list);
-                // self.list_stack.push(Value::List(list));
-            }
-            RightParen => {
-                let list = self.current_list.take();
-                self.list_stack.push(list);
-                self.current_list = Some();
-            }
-        }
-    }
-}
-*/
 #[derive(Debug)]
 pub enum ParseError {
     Reason(String),
@@ -47,6 +24,8 @@ pub fn parse<'a>(tokens: &'a [Token]) -> Result<(Value, &'a [Token]), ParseError
         .split_first()
         .ok_or(ParseError::Reason("could not get token".to_string()))?;
     match &token.payload {
+        RemarkStart => read_remark(rest),
+        RemarkEnd => Err(ParseError::Reason("unexpected `*)`".to_string())),
         LeftParen => read_seq(rest),
         RightParen => Err(ParseError::Reason("unexpected `)`".to_string())),
         Atom(s, is_number) => Ok((parse_atom(&s, is_number), rest)),
@@ -70,12 +49,34 @@ pub fn parse<'a>(tokens: &'a [Token]) -> Result<(Value, &'a [Token]), ParseError
 fn read_seq<'a>(tokens: &'a [Token]) -> Result<(Value, &'a [Token]), ParseError> {
     let mut res: Vec<Value> = vec![];
     let mut xs = tokens;
+    let mut previous_token = None;
     loop {
-        let (next_token, rest) = xs
-            .split_first()
-            .ok_or(ParseError::Reason("could not find closing `)`".to_string()))?;
+        let (next_token, rest) = xs.split_first().ok_or(ParseError::Reason(format!(
+            "could not find closing `)` near {:?}",
+            previous_token.or(Some(0..0)).unwrap()
+        )))?;
+        previous_token = Some(next_token.span.clone());
         if let TokenPayload::RightParen = &next_token.payload {
             return Ok((Value::List(res.into()), rest)); // skip `)`, head to the token after
+        }
+        let (exp, new_xs) = parse(&xs)?;
+        res.push(exp);
+        xs = new_xs;
+    }
+}
+
+fn read_remark<'a>(tokens: &'a [Token]) -> Result<(Value, &'a [Token]), ParseError> {
+    let mut res: Vec<Value> = vec![];
+    let mut xs = tokens;
+    let mut previous_token = None;
+    loop {
+        let (next_token, rest) = xs.split_first().ok_or(ParseError::Reason(format!(
+            "could not find closing `*)` near {:?}",
+            previous_token.or(Some(0..0)).unwrap()
+        )))?;
+        previous_token = Some(next_token.span.clone());
+        if let TokenPayload::RemarkEnd = &next_token.payload {
+            return Ok((Value::nil(), rest));
         }
         let (exp, new_xs) = parse(&xs)?;
         res.push(exp);

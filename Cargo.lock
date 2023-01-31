@@ -303,6 +303,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "lxsp"
+version = "0.1.0"
+dependencies = [
+ "clap",
+ "once_cell",
+ "rustyline",
+ "terminal",
+]
+
+[[package]]
 name = "memchr"
 version = "2.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -346,16 +356,6 @@ dependencies = [
  "net2",
  "winapi 0.2.8",
  "ws2_32-sys",
-]
-
-[[package]]
-name = "my-project"
-version = "0.1.0"
-dependencies = [
- "clap",
- "once_cell",
- "rustyline",
- "terminal",
 ]
 
 [[package]]

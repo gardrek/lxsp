@@ -2,6 +2,8 @@
 pub enum TokenPayload {
     LeftParen,
     RightParen,
+    RemarkStart,
+    RemarkEnd,
     //~ Atom{atom: String, is_number: bool}
     Atom(String, bool),
     Quote(Box<TokenPayload>),
@@ -11,6 +13,7 @@ pub enum TokenPayload {
 pub struct Token {
     pub payload: TokenPayload,
     pub span: core::ops::Range<usize>,
+    //pub line: usize,
 }
 
 #[derive(Debug)]
@@ -45,6 +48,8 @@ impl core::fmt::Display for TokenPayload {
         match &self {
             LeftParen => write!(f, "("),
             RightParen => write!(f, ")"),
+            RemarkStart => write!(f, "(*"),
+            RemarkEnd => write!(f, "*)"),
             Atom(string, _bool) => write!(f, "{:?}", &string),
             Quote(token) => write!(f, "'{}", &token),
         }
@@ -54,11 +59,16 @@ impl core::fmt::Display for TokenPayload {
 pub struct Scanner<'a> {
     source: &'a str,
     cursor: usize,
+    //line_number: usize,
 }
 
 impl<'a> Scanner<'a> {
     pub fn new(source: &'a str) -> Scanner<'a> {
-        Scanner { source, cursor: 0 }
+        Scanner {
+            source,
+            cursor: 0,
+            //line_number: 0
+        }
     }
 
     pub fn scan_token(&mut self) -> Option<Token> {
@@ -68,13 +78,59 @@ impl<'a> Scanner<'a> {
             let short_span = self.cursor..(self.cursor + 1);
             let ch = char_at_index(self.source, self.cursor)?;
             match ch {
+                ';' => {
+                    //let mut prev_ch;
+                    let mut ch;
+                    loop {
+                        //prev_ch = ch;
+                        ch = match char_at_index(self.source, self.cursor) {
+                            Some(x) => x,
+                            None => break 'token None, // end of file
+                        };
+
+                        if ch == '\n' {
+                            break 'token None;
+                        } else {
+                            self.cursor += ch.len_utf8();
+                        }
+                    }
+                    /*let mut ch = ch;
+                    loop {
+                        self.cursor += ch.len_utf8();
+                        match ch {
+                            '\n' => match char_at_index(self.source, self.cursor) {
+                                Some(ch_in) => ch = ch_in,
+                                None => break 'token None,
+                            },
+                            _ => continue,
+                        }
+                    }*/
+                }
                 '(' => {
                     self.cursor += ch.len_utf8();
-                    break 'token Some(Token::new(LeftParen, short_span));
+                    let ch = char_at_index(self.source, self.cursor)?;
+                    match ch {
+                        '*' => {
+                            self.cursor += ch.len_utf8();
+                            break 'token Some(Token::new(RemarkStart, short_span));
+                        }
+                        _ => break 'token Some(Token::new(LeftParen, short_span)),
+                    }
                 }
                 ')' => {
                     self.cursor += ch.len_utf8();
                     break 'token Some(Token::new(RightParen, short_span));
+                }
+                '*' => {
+                    self.cursor += ch.len_utf8();
+                    let ch = char_at_index(self.source, self.cursor)?;
+                    match ch {
+                        ')' => {
+                            self.cursor += ch.len_utf8();
+                            break 'token Some(Token::new(RemarkEnd, short_span));
+                        }
+                        _ => panic!(),
+                    }
                 }
                 '\'' => {
                     let first = self.cursor;

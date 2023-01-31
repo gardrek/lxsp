@@ -1,11 +1,12 @@
 use super::env::Bindings;
 use super::env::LispEnv;
 use super::eval::EvalError;
+pub use super::mac::MacroValue;
 use std::sync::Arc;
 
-type ListValue = Arc<[Value]>;
+pub type ListValue = Arc<[Value]>;
 
-type FuncValue = fn(&[Value], &LispEnv) -> Result<Value, EvalError>;
+pub type FuncValue = fn(&[Value], &LispEnv) -> Result<Value, EvalError>;
 
 #[derive(Clone)]
 pub enum Value {
@@ -26,22 +27,10 @@ pub enum Value {
 //~ pub struct Partial {}
 
 #[derive(Clone)]
-pub struct MacroValue {
-    pub params: ListValue,
-    pub body: Arc<Value>,
-}
-
-#[derive(Clone)]
 pub struct LambdaValue {
     pub args: Arc<Value>,
     pub body: Arc<Value>,
     pub closure: Bindings,
-}
-
-impl MacroValue {
-    pub fn new(params: ListValue, body: Arc<Value>) -> MacroValue {
-        MacroValue { params, body }
-    }
 }
 
 impl LambdaValue {
@@ -128,6 +117,13 @@ impl Value {
     pub fn get_bool(&self) -> Option<bool> {
         match self {
             Value::Bool(b) => Some(*b),
+            _ => None,
+        }
+    }
+
+    pub fn get_macro(&self) -> Option<&MacroValue> {
+        match self {
+            Value::Macro(b) => Some(&b),
             _ => None,
         }
     }

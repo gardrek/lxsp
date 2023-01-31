@@ -1,37 +1,49 @@
-    pub fn eval(&self, val: &LispValue) -> Result<LispValue, EvalError> {
-        use LispValue::*;
-        
-        Ok(match val {
-            Bool(_) | Integer(_) | Func(_) | UnsafeFunc(_) | Lambda(_) => val.fallible_clone()?,
-            Symbol(s) => self
-                .get(s)
-                .ok_or(EvalError::String(format!(
-                    "[internal eval] use of undeclared variable {}",
-                    &s
-                )))?
-                .fallible_clone()?,
-            List(list) => {
-                if val.is_nil() {
-                    val.fallible_clone()?
-                } else {
-                    let f = self.eval(&list[0])?;
-                    //self.apply(&f, &list[1..])?
-                    match f {
-                        Func(_) | Lambda(_) => self.apply(&f, &list[1..])?,
-                        UnsafeFunc(_) => {
-                            return Err(EvalError::String(format!(
-                                "unsafe functions must be called with the unsafe keyword [[ {} ]]",
-                                &f
-                            )))
-                        }
-                        Bool(_) | Integer(_) | Symbol(_) | List(_) => {
-                            return Err(EvalError::String(format!(
-                                "[internal fn: reduce] value cannot be called: {}",
-                                &f
-                            )))
-                        }
-                    }
-                }
-            }
-        })
+
+definition:
+(macro (list of parameters) (body: usually a list, could be just a value))
+
+call:
+(someMacro list of arguments)
+
+definition:
+(add10 (macro (x) (list 'add '10 x)))
+
+call:
+(add10 13)
+
+expansion:
+(add 10 13)
+
+expansion procedure:
+first, identify lists which start with "a macro" (how do we decide what to evaluate to find macros?)
+get the macro, and the list of arguments is the rest of the list
+the macro object has two parts:
+    parameters list
+    body
+we have the `get` method already which gets the argument for a given symbol, if that symbol is in the list of parameters
+so, we traverse the macro body recursively:
+    match body {
+        Symbol(s) => match mac.get(s) {
+            Some(arg) => arg.clone(), // just passing the argument through unchanged
+            None => body.clone(),
+        }
+        List(list) => {
+            if list.len() != 0 {
+                let first = match &list[0] {
+                    Symbol(s) => todo!(),
+                 };
+                here, we call the top-level expansion function on each argument, making a new list from it
+            } else { Value::nil() }
+        }
+        _everything_else => body.clone(),
     }
+
+
+fn expand_list(list: ListValue) {
+            if list.len() != 0 {
+                let first = match &list[0] {
+                    Symbol(s) => todo!(),
+                 };
+                here, we call the top-level expansion function on each argument, making a new list from it
+            } else { Value::nil() }
+}

@@ -1,4 +1,6 @@
-
+username; beourguest1998@hotmail.com
+password: 1998Banjo!
+birthday: June 29, 1998
 
 (mul (let 
     '((mulRecurse (fn (x y) (if (lt x 1) 0 (add y (mulRecurse (sub x 1) y))))))
@@ -226,3 +228,26 @@ x 6  E 9 6 1
 u 2  D A 5 2
 c 3  C B 4 3
 ```
+
+
+
+
+
+(setq2 x y (+ z 3))
+
+
+(setq2 v1 v2 e)
+->
+(progn
+  (setq v1 e)
+  (setq v2 e))
+
+
+(defmacro setq2 (v1 v2 e)
+  (list 'progn (list 'setq v1 e) (list 'setq v2 e)))
+
+
+(defun setq2-function (v1 v2 e)
+  (list 'progn (list 'setq v1 e) (list 'setq v2 e)))
+
+

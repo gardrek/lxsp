@@ -41,7 +41,11 @@ l = ((c0 r0) (c1 r1) (c2 r2) ...)
 
 `(if (eval ,(car (car l))) (eval ,(car (cdr (car l)))) (cond ,(cdr l)))
 
-x <- (list 'if (list 'eval (car (car l))) (list 'eval (car (cdr (car l))) (list 'cond (cdr l))))
+x <- (list 'if (list 'eval (car (car l))) (list 'eval (car (cdr (car l)))) (list 'cond (cdr l)))
+
+(list 'if (list 'eval (car (car l))) (list 'eval (car (cdr (car l)))) (list 'cond (cdr l)))
+
+(list 'if (truthyP l) (list 'if (list 'eval (car (car l))) (list 'eval (car (cdr (car l)))) (list 'cond (cdr l))) ())
 
 (cond (macro (l) x))
 

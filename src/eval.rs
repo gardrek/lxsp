@@ -12,6 +12,7 @@ pub enum EvalError {
     Static(&'static str),
     String(String),
     AttemptToClone,
+    Boxed(Box<dyn std::error::Error>),
 }
 
 impl std::error::Error for EvalError {}
@@ -23,12 +24,19 @@ impl core::fmt::Display for EvalError {
             Static(s) => write!(f, "{}", s),
             String(s) => write!(f, "{}", s),
             AttemptToClone => write!(f, "Attempt To Clone"),
+            Boxed(b) => write!(f, "Boxed Error {}", *b),
         }
     }
 }
 
 pub fn eval_err(s: &'static str) -> EvalError {
     EvalError::Static(s)
+}
+
+impl From<Box<dyn std::error::Error>> for EvalError {
+    fn from(other: Box<dyn std::error::Error>) -> EvalError {
+        EvalError::Boxed(other)
+    }
 }
 
 pub fn default_env<'a>() -> LispEnv<'a> {
@@ -334,20 +342,36 @@ pub fn default_env<'a>() -> LispEnv<'a> {
             "spookyAdd",
             |args: &[LispValue], env: &LispEnv| -> Result<LispValue, EvalError> {
                 if args.len() != 2 {
-                    return Err(eval_err("[sub] Wrong number of arguments"));
+                    return Err(eval_err("[spookyAdd] Wrong number of arguments"));
                 }
                 let a = env
                     .eval(&args[0])?
                     .get_int()
-                    .ok_or(eval_err("[sub] Wrong argument type"))?;
+                    .ok_or(eval_err("[spookyAdd] Wrong argument type"))?;
                 let b = env
                     .eval(&args[1])?
                     .get_int()
-                    .ok_or(eval_err("[sub] Wrong argument type"))?;
+                    .ok_or(eval_err("[spookyAdd] Wrong argument type"))?;
                 Ok(Integer(a + b))
             },
         ),
         unsafe_func("lua", lua::run_lua_file_from_lisp_args),
+        unsafe_func(
+            "readline",
+            |args: &[LispValue], _env: &LispEnv| -> Result<LispValue, EvalError> {
+                if args.len() != 1 {
+                    return Err(eval_err("[readline] Wrong number of arguments"));
+                }
+
+                let mut line = String::new();
+
+                std::io::stdin()
+                    .read_line(&mut line)
+                    .expect("[readline] Failed to read line");
+
+                Ok(super::parse_string(&line)?)
+            },
+        ),
         unsafe_func(
             "readf",
             |args: &[LispValue], env: &LispEnv| -> Result<LispValue, EvalError> {
@@ -421,6 +445,36 @@ pub fn default_env<'a>() -> LispEnv<'a> {
                     Err(e) => panic!("{}", e),
                     Ok(ok) => Ok(ok),
                 }
+            },
+        ),
+        func(
+            "expand",
+            |args: &[LispValue], env: &LispEnv| -> Result<LispValue, EvalError> {
+                if args.len() < 1 {
+                    return Err(eval_err("[expand] Wrong number of arguments"));
+                }
+
+                let mac = env.eval(&args[0])?;
+
+                let mac_v = mac.clone();
+
+                let mac = mac
+                    .get_macro()
+                    .ok_or(eval_err("[expand] Wrong argument type"))?;
+
+                let call = {
+                    let mut v = vec![mac_v];
+                    v.extend_from_slice(&args[1..]);
+                    v.into()
+                };
+
+                // note that the entire call, including macro, is passed in
+                Ok(match mac.expand_body(&mac.body.fallible_clone()?, &call) {
+                    Ok(v) => v,
+                    _ => return Err(eval_err("[expand] failure to expand macro call")),
+                })
+
+                //Ok(LispValue::nil())
             },
         ),
         /*

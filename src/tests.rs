@@ -1,7 +1,7 @@
 #![cfg(test)]
 
 use super::*;
-use env::LispEnv as LispEnv;
+use env::LispEnv;
 use value::Value as LispValue;
 //use eval::{LispEnv, EvalError};
 

@@ -1,7 +1,9 @@
 use super::eval::{eval_err, EvalError};
 use super::value::MacroValue;
 use super::value::Value as LispValue;
+
 use std::collections::HashMap;
+use std::error::Error;
 use std::sync::Arc;
 
 pub type Bindings = HashMap<String, LispValue>;
@@ -81,7 +83,7 @@ impl LispEnv<'_> {
     }
 
     pub fn eval(&self, val: &LispValue) -> Result<LispValue, EvalError> {
-        LispEnv::_eval(self, val)
+        LispEnv::eval_(self, val)
     }
 
     pub fn delegated_eval(&self, val: &LispValue, eval_fn: EvalFn) -> Result<LispValue, EvalError> {
@@ -106,7 +108,9 @@ impl LispEnv<'_> {
                     let f = eval_fn(self, &list[0])?;
                     //self.apply(&f, &list[1..])?
                     match f {
-                        Macro(_) => eval_fn(self, val)?,
+                        //Macro(_) => eval_fn(self, val)?,
+                        //Macro(_) => panic!("macros should be gone"),
+                        Macro(_) => LispValue::quoted("1998".into()),
                         _ => self.outer_apply(&f, &list[1..])?,
                     }
                 }
@@ -130,18 +134,75 @@ impl LispEnv<'_> {
         }
     }
 
-    pub fn _eval(env: &LispEnv, val: &LispValue) -> Result<LispValue, EvalError> {
-        env.delegated_eval(val, LispEnv::_eval)
+    fn eval_(env: &LispEnv, val: &LispValue) -> Result<LispValue, EvalError> {
+        env.delegated_eval(val, LispEnv::eval_)
     }
 
-    fn macro_expand(&self, mac: &MacroValue, args: &[LispValue]) -> Result<LispValue, EvalError> {
-        let inner_env = self.new_inner_env(LispValue::List(mac.params.clone()).into(), args)?;
-        let body = (*mac.body).clone();
-        Ok(inner_env.macro_eval(&body)?)
-    }
-
-    pub fn macro_eval(&self, val: &LispValue) -> Result<LispValue, EvalError> {
+    fn macro_eval(&self, val: &LispValue) -> Result<LispValue, EvalError> {
         LispEnv::_macro_eval(self, val)
+    }
+
+    /*
+        fn _macro_expand(&self, mac: &MacroValue, args: &[LispValue]) -> Result<LispValue, EvalError> {
+            let inner_env = self.new_inner_env(LispValue::List(mac.params.clone()).into(), args)?;
+            let body = (*mac.body).clone();
+            Ok(inner_env.macro_eval(&body)?)
+        }
+    */
+    fn macro_expand(&self, _mac: &MacroValue, _args: &[LispValue]) -> Result<LispValue, EvalError> {
+        todo!()
+    }
+
+    fn _macro_find<'a>(
+        mac: &MacroValue,
+        args: &'a [LispValue],
+        pattern: &LispValue,
+    ) -> Option<&'a LispValue> {
+        if let Some(index) = mac.params.iter().position(|s| s == pattern) {
+            Some(&args[index])
+        } else {
+            None
+        }
+    }
+
+    fn _macro_replacement_recurse(
+        value: &LispValue,
+        _mac: &MacroValue,
+        _args: &[LispValue],
+        _pattern: &LispValue,
+    ) -> Result<LispValue, Box<dyn Error>> {
+        use LispValue::*;
+
+        fn _fallible_replace(_v: &LispValue) -> Result<LispValue, Box<dyn Error>> {
+            todo!() //Ok(LispEnv::macro_replacement_recurse(v, mac, args, pattern)?)
+        }
+
+        match value {
+            Macro(_) => todo!("macros cannot currently produce their own macros"),
+            List(l) => {
+                let list = (*l)
+                    .iter()
+                    .map(_fallible_replace)
+                    .collect::<Result<Vec<LispValue>, Box<dyn Error>>>()?;
+
+                Ok(List(list.into()))
+            }
+
+            Symbol(_s) => {
+                /*
+                let v = match LispEnv::macro_find(mac, args, pattern) {
+                    Some(other) => other,
+                    None => value,
+                };
+                Ok(v.clone())
+                */
+                Ok(value.clone())
+            }
+
+            Bool(_) | Integer(_) | Func(_) | UnsafeFunc(_) | Lambda(_) | UnsafeCall(_) => {
+                Ok(value.clone())
+            }
+        }
     }
 
     fn _macro_eval(env: &LispEnv, val: &LispValue) -> Result<LispValue, EvalError> {
@@ -233,6 +294,45 @@ impl LispEnv<'_> {
 
     pub fn new_unsafer_env<'a>(&'a self) -> LispEnv {
         self.new_inner_from_parts(Default::default(), self.unsafe_level + 1)
+    }
+
+    pub fn new_macro_env<'a>(
+        &'a self,
+        params: Arc<[LispValue]>,
+        args: &[LispValue],
+    ) -> Result<LispEnv<'a>, EvalError> {
+        let id =
+            |_env: &LispEnv, val: &LispValue| -> Result<LispValue, EvalError> { Ok(val.clone()) };
+        self.new_custom_env(params, args, id, id, self.unsafe_level)
+        //todo!()
+    }
+
+    pub fn new_custom_env<'a>(
+        &'a self,
+        params: Arc<[LispValue]>,
+        args: &[LispValue],
+        param_parse: EvalFn,
+        arg_parse: EvalFn,
+        unsafe_level: usize,
+    ) -> Result<LispEnv<'a>, EvalError> {
+        let p_len = params.len();
+        let a_len = args.len();
+        if p_len != a_len {
+            return Err(EvalError::String(format!(
+                "macro expected {} arguments, got {}",
+                p_len, a_len
+            )));
+        }
+
+        let keys = params.iter().map(|x| param_parse(self, x));
+        let values = args.iter().map(|x| arg_parse(self, x));
+
+        let mut data: Bindings = HashMap::new();
+
+        for (key, value) in keys.zip(values) {
+            data.insert(key?.to_string(), value?.clone());
+        }
+        Ok(self.new_inner_from_parts(data, unsafe_level))
     }
 
     pub fn new_inner_env<'a>(

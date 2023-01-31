@@ -1,6 +1,7 @@
 mod cli;
 mod env;
 mod eval;
+mod mac;
 mod parse;
 mod scan;
 mod tests;
@@ -20,7 +21,7 @@ use terminal::Retrieved;
 use clap::Parser;
 use once_cell::sync::OnceCell;
 
-use env::LispEnv as LispEnv;
+use env::LispEnv;
 use value::Value as LispValue;
 
 pub static BASE_ENV: OnceCell<LispEnv<'_>> = OnceCell::new();
@@ -31,9 +32,10 @@ pub fn parse_eval(source: &str, env: &LispEnv) -> Result<LispValue, Box<dyn Erro
     Ok(env.eval(&parse_string(&source)?)?)
 }
 
-pub fn parse_eval_and_macro_pass(source: &str, env: &LispEnv) -> Result<LispValue, Box<dyn Error>> {
+pub fn parse_macro_pass_and_eval(source: &str, env: &LispEnv) -> Result<LispValue, Box<dyn Error>> {
     let result = parse_string(source)?;
-    let passed = env.macro_eval(&result)?;
+    let passed = mac::MacroValue::expand_recurse(&result)?;
+    //    let passed = env.macro_eval(&result)?;
     Ok(env.eval(&passed)?)
     //Ok(passed)
 }
@@ -172,7 +174,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                     //    break 'main Ok(());
                 }
 
-                let result = parse_eval_and_macro_pass(&line, env);
+                let result = parse_macro_pass_and_eval(&line, env);
                 match result {
                     Ok(res) => {
                         print!("\r => {}\r\n", res);
